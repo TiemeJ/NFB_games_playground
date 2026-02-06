@@ -3,192 +3,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand Final Visualizer</title>
+    <title>MyndBand Visualizer (Final)</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f4f7f6; display: flex; flex-direction: column; align-items: center; padding: 40px; color: #333; }
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 30px; color: #333; }
         
-        h1 { margin-bottom: 10px; color: #2c3e50; }
-        .status-pill { padding: 8px 20px; border-radius: 50px; font-weight: bold; font-size: 0.9em; margin-bottom: 30px; background: #dfe6e9; color: #636e72; }
-        .status-pill.connected { background: #55efc4; color: #00b894; color: #004d40; }
-        .status-pill.error { background: #ff7675; color: #fff; }
+        /* Header */
+        h1 { margin: 0; color: #2d3436; }
+        .subtitle { color: #636e72; font-size: 0.9em; margin-bottom: 20px; }
+        
+        /* Status Bar */
+        #status-box { padding: 10px 20px; background: #dfe6e9; border-radius: 30px; font-weight: bold; color: #636e72; margin-bottom: 20px; transition: 0.3s; }
+        .connected { background: #00b894 !important; color: #fff !important; }
+        
+        button { padding: 15px 40px; font-size: 18px; font-weight: bold; background: #0984e3; color: white; border: none; border-radius: 10px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.2); }
+        button:disabled { background: #b2bec3; transform: none; box-shadow: none; }
 
-        button { 
-            padding: 15px 40px; font-size: 18px; font-weight: bold; 
-            background: #0984e3; color: white; border: none; border-radius: 8px; 
-            cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.2);
-        }
-        button:hover { background: #0069d9; transform: translateY(-2px); }
-        button:disabled { background: #b2bec3; cursor: not-allowed; transform: none; }
-
-        /* Visualizer Grid */
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 800px; margin-top: 40px; }
+        /* Dashboard */
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 800px; margin-top: 30px; }
+        .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); text-align: center; }
         
-        .card { background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 20px rgba(0,0,0,0.05); text-align: center; }
-        .card h3 { margin: 0 0 15px 0; color: #b2bec3; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px; }
+        .label { font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; color: #b2bec3; font-weight: bold; margin-bottom: 10px; }
+        .value { font-size: 4em; font-weight: bold; color: #2d3436; line-height: 1; }
         
-        .big-number { font-size: 4em; font-weight: bold; color: #2d3436; margin-bottom: 10px; }
-        
-        /* Signal Quality Indicator */
-        #sig-val { font-size: 2em; }
+        /* Signal Quality Colors */
         .sig-good { color: #00b894; }
-        .sig-ok { color: #fdcb6e; }
         .sig-bad { color: #d63031; }
+        .sig-warn { color: #fdcb6e; }
 
-        /* Bar Graphs */
-        .bar-container { width: 100%; height: 10px; background: #ecf0f1; border-radius: 5px; overflow: hidden; margin-top: 10px; }
-        .bar-fill { height: 100%; width: 0%; transition: width 0.5s ease-out; }
-        #att-bar { background: #e17055; }
-        #med-bar { background: #00cec9; }
+        /* Bars */
+        .bar-bg { width: 100%; height: 12px; background: #f1f2f6; border-radius: 6px; margin-top: 15px; overflow: hidden; }
+        .bar-fill { height: 100%; width: 0%; transition: width 0.4s ease-out; }
 
-        #debug { margin-top: 50px; color: #b2bec3; font-family: monospace; font-size: 0.8em; }
+        /* Debug Footer */
+        .debug-area { margin-top: 40px; width: 100%; max-width: 800px; font-family: 'Courier New', monospace; font-size: 0.8em; }
+        .debug-title { font-weight: bold; color: #b2bec3; border-bottom: 1px solid #ddd; margin-bottom: 5px; }
+        #hex-log { color: #636e72; word-break: break-all; line-height: 1.5; }
+        .highlight { background: #ffeaa7; color: #d35400; font-weight: bold; padding: 0 2px; }
     </style>
 </head>
 <body>
 
     <h1>🧠 MyndBand Visualizer</h1>
-    <div id="status" class="status-pill">Ready to Connect</div>
+    <div class="subtitle">Fixed Parser: Ignores Packet Counters</div>
     
-    <button id="connectBtn">CONNECT HEADSET</button>
+    <div id="status-box">Ready</div>
+    <button id="connectBtn">CONNECT</button>
 
-    <div class="grid">
-        <!-- Signal Quality -->
+    <div class="dashboard">
+        <!-- Signal -->
         <div class="card" style="grid-column: span 2;">
-            <h3>Signal Quality</h3>
-            <div id="sig-val" class="big-number sig-bad">--</div>
-            <div id="sig-text" style="font-size: 0.9em; color: #636e72;">Connect to start</div>
+            <div class="label">Signal Quality</div>
+            <div class="value sig-bad" id="sig-val">--</div>
+            <div style="font-size: 0.9em; margin-top: 5px; color: #aaa;" id="sig-desc">Connect headset</div>
         </div>
 
         <!-- Attention -->
         <div class="card">
-            <h3>Focus (Attention)</h3>
-            <div id="att-val" class="big-number">0</div>
-            <div class="bar-container"><div id="att-bar" class="bar-fill"></div></div>
+            <div class="label">Focus</div>
+            <div class="value" id="att-val">0</div>
+            <div class="bar-bg"><div class="bar-fill" id="att-bar" style="background: #e17055;"></div></div>
         </div>
 
         <!-- Meditation -->
         <div class="card">
-            <h3>Relaxation (Meditation)</h3>
-            <div id="med-val" class="big-number">0</div>
-            <div class="bar-container"><div id="med-bar" class="bar-fill"></div></div>
+            <div class="label">Relaxation</div>
+            <div class="value" id="med-val">0</div>
+            <div class="bar-bg"><div class="bar-fill" id="med-bar" style="background: #00cec9;"></div></div>
         </div>
     </div>
 
-    <div id="debug">Raw packet counts will appear here...</div>
+    <div class="debug-area">
+        <div class="debug-title">LIVE DATA STREAM (Hex)</div>
+        <div id="hex-log">Waiting for data...</div>
+    </div>
 
     <script>
         const btn = document.getElementById('connectBtn');
-        const statusEl = document.getElementById('status');
-        const debugEl = document.getElementById('debug');
-        
-        // The service and char you found
-        const SERVICE_UUID = "039afff0-2c94-11e3-9e06-0002a5d5c51b"; 
+        const statusBox = document.getElementById('status-box');
+        const hexLog = document.getElementById('hex-log');
 
-        let buffer = [];
-        let packetCount = 0;
+        const SERVICE_UUID = "039afff0-2c94-11e3-9e06-0002a5d5c51b"; 
 
         btn.addEventListener('click', async () => {
             try {
-                updateStatus("Searching...", "");
+                statusBox.innerText = "Scanning...";
                 
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
                     optionalServices: [SERVICE_UUID]
                 });
 
-                updateStatus("Connecting...", "");
+                statusBox.innerText = "Connecting...";
                 const server = await device.gatt.connect();
-                
                 const service = await server.getPrimaryService(SERVICE_UUID);
-                const chars = await service.getCharacteristics();
                 
-                // Find the Notify characteristic
+                const chars = await service.getCharacteristics();
                 const notifyChar = chars.find(c => c.properties.notify);
-                if(!notifyChar) throw new Error("No data stream found");
+                
+                if (!notifyChar) throw new Error("No Data Stream Found");
 
                 await notifyChar.startNotifications();
                 notifyChar.addEventListener('characteristicvaluechanged', handleData);
-
-                updateStatus("Connected & Streaming", "connected");
+                
+                statusBox.innerText = "Connected & Streaming";
+                statusBox.className = "connected";
                 btn.innerText = "Connected";
                 btn.disabled = true;
 
             } catch (e) {
-                updateStatus("Error: " + e.message, "error");
+                statusBox.innerText = "Error: " + e.message;
             }
         });
 
-        function updateStatus(msg, type) {
-            statusEl.innerText = msg;
-            statusEl.className = "status-pill " + type;
-        }
+        // --- ROBUST PARSER ---
+        let buffer = [];
 
-        // --- CUSTOM PARSER FOR YOUR DEVICE ---
-        // Based on your screenshot: 00 00 EA 00 00 02 C8 04 00 05 00
         function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
             
-            // Add to buffer
-            for(let b of data) buffer.push(b);
-            if(buffer.length > 512) buffer.shift(); // Prevent overflow
+            // 1. Update Hex Log (Bottom of screen)
+            let hexStr = "";
+            for(let b of data) {
+                buffer.push(b); // Add to internal buffer
+                hexStr += b.toString(16).toUpperCase().padStart(2, '0') + " ";
+            }
+            // Keep log short
+            if (hexLog.innerText.length > 300) hexLog.innerText = hexLog.innerText.slice(0, 300) + "..."; 
+            hexLog.innerHTML = hexStr + " " + hexLog.innerHTML;
 
-            // Scan for the pattern: [00, 00, EA]
-            while(buffer.length >= 12) { // Need at least 11-12 bytes for a full packet
+            // 2. Scan Buffer for Signature
+            scanBuffer();
+        }
+
+        function scanBuffer() {
+            // We look for the pattern: 02 [Sig] 04 [Att] 05 [Med]
+            // This relies on the specific order seen in your screenshot.
+            
+            // Limit buffer size to prevent memory leaks
+            if(buffer.length > 1024) buffer.shift();
+
+            // We need at least 6 bytes for the pattern: 02 S 04 A 05 M
+            for (let i = 0; i < buffer.length - 5; i++) {
                 
-                // Check header 00 00 EA
-                if(buffer[0] === 0x00 && buffer[1] === 0x00 && buffer[2] === 0xEA) {
+                if (buffer[i] === 0x02 && buffer[i+2] === 0x04 && buffer[i+4] === 0x05) {
                     
-                    // We found the header!
-                    // Expected offsets based on screenshot:
-                    // [5] = 02 (Signal Code)
-                    // [6] = Signal Value
-                    // [7] = 04 (Attention Code)
-                    // [8] = Attention Value
-                    // [9] = 05 (Meditation Code)
-                    // [10] = Meditation Value
+                    const signal = buffer[i+1];
+                    const attention = buffer[i+3];
+                    const meditation = buffer[i+5];
 
-                    // Verify codes to be safe (in case packet shifts)
-                    if(buffer[5] === 0x02 && buffer[7] === 0x04 && buffer[9] === 0x05) {
-                        const signal = buffer[6];
-                        const attention = buffer[8];
-                        const meditation = buffer[10];
+                    updateUI(signal, attention, meditation);
 
-                        updateUI(signal, attention, meditation);
-                        packetCount++;
-                        debugEl.innerText = `Packets Received: ${packetCount} | Last Signal: ${signal}`;
-                    }
-
-                    // Remove this packet from buffer
-                    buffer.splice(0, 12); 
-                } else {
-                    // Not a header, shift one byte
-                    buffer.shift();
+                    // Optional: Highlight the find in the log?
+                    // Remove processed bytes to avoid re-reading
+                    buffer.splice(0, i + 6);
+                    return; // Done for this pass
                 }
             }
         }
 
         function updateUI(sig, att, med) {
-            // Signal Quality
-            const sigEl = document.getElementById('sig-val');
-            const sigText = document.getElementById('sig-text');
-            
-            if(sig === 0) {
-                sigEl.innerText = "Good";
-                sigEl.className = "big-number sig-good";
-                sigText.innerText = "Clean Signal (0)";
-            } else if(sig === 200) {
-                sigEl.innerText = "Sensors Off";
-                sigEl.className = "big-number sig-bad";
-                sigText.innerText = "Check Headset Contact (200)";
+            // Signal
+            const sigVal = document.getElementById('sig-val');
+            const sigDesc = document.getElementById('sig-desc');
+
+            if (sig === 0) {
+                sigVal.innerText = "Good";
+                sigVal.className = "value sig-good";
+                sigDesc.innerText = "Clean Signal (0)";
+            } else if (sig === 200) {
+                sigVal.innerText = "Sensors Off";
+                sigVal.className = "value sig-bad";
+                sigDesc.innerText = "Check skin contact (200)";
             } else {
-                sigEl.innerText = "Noise";
-                sigEl.className = "big-number sig-ok";
-                sigText.innerText = `Interference: ${sig} (Wait for 0)`;
+                sigVal.innerText = "Noise";
+                sigVal.className = "value sig-warn";
+                sigDesc.innerText = `Interference level: ${sig}`;
             }
 
             // Attention
             document.getElementById('att-val').innerText = att;
             document.getElementById('att-bar').style.width = att + "%";
-
+            
             // Meditation
             document.getElementById('med-val').innerText = med;
             document.getElementById('med-bar').style.width = med + "%";
