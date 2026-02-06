@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MyndBand Web Visualizer</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        h1 { color: #333; }
+        button { padding: 12px 24px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 30px; width: 100%; max-width: 600px; }
+        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
+        .value { font-size: 2.5em; font-weight: bold; color: #333; }
+        .label { color: #666; text-transform: uppercase; font-size: 0.9em; letter-spacing: 1px; }
+        
+        #signal-quality { font-size: 1em; margin-bottom: 20px; }
+        .good-signal { color: green; font-weight: bold; }
+        .bad-signal { color: red; font-weight: bold; }
+        
+        #log { margin-top: 20px; font-family: monospace; color: #555; font-size: 0.9em; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+
+    <h1>🧠 MyndBand Visualizer</h1>
+    <div id="signal-quality">Status: Disconnected</div>
+    <button id="connectBtn">Connect Headset</button>
+
+    <div class="dashboard">
+        <div class="card">
+            <div class="label">Attention (Focus)</div>
+            <div class="value" id="attention">--</div>
+        </div>
+        <div class="card">
+            <div class="label">Meditation (Calm)</div>
+            <div class="value" id="meditation">--</div>
+        </div>
+        <div class="card">
+            <div class="label">Blink Strength</div>
+            <div class="value" id="blink">--</div>
+        </div>
+        <div class="card">
+            <div class="label">Raw Wave</div>
+            <div class="value" id="raw">--</div>
+        </div>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        const connectBtn = document.getElementById('connectBtn');
+        const logEl = document.getElementById('log');
+        const statusEl = document.getElementById('signal-quality');
+
+        // UI Update Helper
+        const updateUI = (id, val) => document.getElementById(id).innerText = val;
+
+        // --- Configuration ---
+        // MyndBand/NeuroSky typically use a specific serial-over-BLE service.
+        // If these UUIDs don't work, we scan for any service notifying data.
+        const NEUROSKY_SERVICE_UUID = '0000fe41-0000-1000-8000-00805f9b34fb'; // Common for MindWave Mobile 2
+        
+        let device, server, characteristic;
+
+        connectBtn.addEventListener('click', async () => {
+            try {
+                // 1. Request Bluetooth Device
+                log("Requesting device...");
+                device = await navigator.bluetooth.requestDevice({
+                    // Filter for devices with "Mind" or "Mynd" in the name
+                    filters: [
+                        { namePrefix: 'Mynd' }, 
+                        { namePrefix: 'Mind' }
+                    ],
+                    // We must accept all services to find the serial stream dynamically if needed
+                    optionalServices: [NEUROSKY_SERVICE_UUID, "0000ffe0-0000-1000-8000-00805f9b34fb"] 
+                });
+
+                device.addEventListener('gattserverdisconnected', onDisconnected);
+
+                // 2. Connect to GATT Server
+                log("Connecting to GATT Server...");
+                server = await device.gatt.connect();
+
+                // 3. Find the Serial Stream Service
+                log("Getting Services...");
+                const services = await server.getPrimaryServices();
+                
+                let foundChar = null;
+
+                // Look through services to find a Notify characteristic (Serial Stream)
+                for (const service of services) {
+                    const chars = await service.getCharacteristics();
+                    for (const c of chars) {
+                        if (c.properties.notify) {
+                            foundChar = c;
+                            break;
+                        }
+                    }
+                    if (foundChar) break;
+                }
+
+                if (!foundChar) throw new Error("Could not find a serial stream characteristic.");
+
+                characteristic = foundChar;
+                log(`Connected to service: ${characteristic.service.uuid}`);
+
+                // 4. Start Notifications
+                await characteristic.startNotifications();
+                characteristic.addEventListener('characteristicvaluechanged', handleData);
+                
+                statusEl.innerText = "Status: Connected (Waiting for data...)";
+                statusEl.className = "good-signal";
+                connectBtn.disabled = true;
+                connectBtn.innerText = "Connected";
+
+            } catch (error) {
+                log("Error: " + error);
+                statusEl.innerText = "Status: Error";
+                statusEl.className = "bad-signal";
+            }
+        });
+
+        function onDisconnected() {
+            statusEl.innerText = "Status: Disconnected";
+            statusEl.className = "bad-signal";
+            connectBtn.disabled = false;
+            connectBtn.innerText = "Connect Headset";
+            log("Device disconnected.");
+        }
+
+        function log(msg) {
+            console.log(msg);
+            // logEl.innerText = msg + "\n" + logEl.innerText; // Uncomment to see debug logs on screen
+        }
+
+        // --- ThinkGear Protocol Parser ---
+        // Protocol: [SYNC] [SYNC] [PLENGTH] [PAYLOAD...] [CHKSUM]
+        // SYNC Byte = 0xAA
+
+        let buffer = []; // Internal buffer to hold incoming bytes
+
+        function handleData(event) {
+            const value = event.target.value;
+            // Convert DataView to Array and add to buffer
+            for (let i = 0; i < value.byteLength; i++) {
+                buffer.push(value.getUint8(i));
+            }
+
+            parseBuffer();
+        }
+
+        function parseBuffer() {
+            // We need at least 3 bytes to start (AA AA LEN)
+            while (buffer.length >= 3) {
+                // Check for Sync bytes (0xAA, 0xAA)
+                if (buffer[0] !== 0xAA || buffer[1] !== 0xAA) {
+                    buffer.shift(); // Invalid sync, shift one byte and try again
+                    continue;
+                }
+
+                const payloadLength = buffer[2];
+
+                // Do we have the full packet? (Header(3) + Payload(Length) + Checksum(1))
+                if (buffer.length < 3 + payloadLength + 1) {
+                    return; // Wait for more data
+                }
+
+                // Extract payload and checksum
+                const payload = buffer.slice(3, 3 + payloadLength);
+                const checksum = buffer[3 + payloadLength];
+
+                // Validate Checksum (Sum of payload bytes, inverted, truncated to 8 bits)
+                const sum = payload.reduce((a, b) => a + b, 0);
+                const calculatedChecksum = (~sum) & 0xFF;
+
+                if (checksum === calculatedChecksum) {
+                    decodePayload(payload);
+                } else {
+                    log("Checksum fail!");
+                }
+
+                // Remove this packet from buffer
+                buffer.splice(0, 3 + payloadLength + 1);
+            }
+        }
+
+        function decodePayload(payload) {
+            let i = 0;
+            while (i < payload.length) {
+                const code = payload[i];
+                i++; // Move past code
+
+                // Parse based on Data Code (ThinkGear Serial Stream Guide)
+                if (code === 0x02) { // Signal Quality (0-255)
+                    const signal = payload[i];
+                    i++;
+                    if (signal === 0) {
+                        statusEl.innerText = "Status: Good Signal";
+                        statusEl.className = "good-signal";
+                    } else if (signal === 200) {
+                        statusEl.innerText = "Status: Sensors Off Head";
+                        statusEl.className = "bad-signal";
+                    } else {
+                        statusEl.innerText = `Status: Poor Signal (${signal})`;
+                        statusEl.className = "bad-signal";
+                    }
+                } 
+                else if (code === 0x04) { // Attention (0-100)
+                    const attention = payload[i];
+                    updateUI('attention', attention);
+                    i++;
+                } 
+                else if (code === 0x05) { // Meditation (0-100)
+                    const meditation = payload[i];
+                    updateUI('meditation', meditation);
+                    i++;
+                } 
+                else if (code === 0x16) { // Blink Strength (0-255)
+                    const blink = payload[i];
+                    updateUI('blink', blink);
+                    i++;
+                } 
+                else if (code === 0x80) { // RAW Wave Value (2 bytes, big-endian)
+                    // Length is technically next byte, but 0x80 is defined as length 2 in some docs
+                    // Usually payload stream has length byte for multi-byte codes
+                    const len = payload[i]; 
+                    i++; 
+                    const val = (payload[i] << 8) | payload[i+1];
+                    // Convert to signed 16-bit integer
+                    const raw = val >= 32768 ? val - 65536 : val;
+                    // updateUI('raw', raw); // Updates too fast for text, good for graphs
+                    i += len;
+                }
+                else if (code === 0x83) { // ASIC EEG Power (Frequency Bands)
+                    // This is the detailed breakdown (Delta, Theta, Alpha, etc.)
+                    // Length = 24 bytes
+                    const len = payload[i];
+                    i += len + 1; 
+                }
+                else {
+                    // Unknown code or single byte code we don't care about
+                    // Often just skip it, but strictly we should know length.
+                    // For this simple parser, if we hit unknown multi-byte, we might desync.
+                    // Fortunately, standard packets usually group Att/Med/Signal together.
+                }
+            }
+        }
+    </script>
+</body>
+</html>
