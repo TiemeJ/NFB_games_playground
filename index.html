@@ -3,248 +3,186 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand Web Visualizer 2.0</title>
+    <title>MyndBand Universal Scanner</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        h1 { color: #333; margin-bottom: 5px; }
-        p { color: #666; margin-bottom: 30px; }
+        body { font-family: monospace; background: #1a1a1a; color: #00ff00; padding: 20px; max-width: 800px; margin: 0 auto; }
+        h1 { color: #fff; border-bottom: 1px solid #444; padding-bottom: 10px; }
+        button { font-family: monospace; padding: 15px 30px; font-size: 16px; background: #00ff00; color: black; border: none; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
+        button:hover { background: #00cc00; }
         
-        button { padding: 12px 24px; font-size: 16px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
-        button:hover { background: #0056b3; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        
-        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; width: 100%; max-width: 600px; }
-        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-align: center; }
-        .value { font-size: 3em; font-weight: bold; color: #333; margin: 10px 0; }
-        .label { color: #888; text-transform: uppercase; font-size: 0.85em; letter-spacing: 1.5px; font-weight: 600; }
-        
-        #signal-quality { font-size: 1.1em; margin-bottom: 20px; font-weight: 500; padding: 8px 16px; border-radius: 20px; background: #e0e0e0; }
-        .good-signal { background: #d4edda !important; color: #155724; }
-        .bad-signal { background: #f8d7da !important; color: #721c24; }
-        .connecting { background: #fff3cd !important; color: #856404; }
+        #dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .stat-box { border: 1px solid #444; padding: 15px; background: #222; }
+        .stat-label { color: #888; font-size: 0.8em; }
+        .stat-val { font-size: 2em; color: #fff; }
 
-        #debug-log { 
-            margin-top: 40px; width: 100%; max-width: 600px; 
-            background: #2d2d2d; color: #00ff00; 
-            padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.8em; 
-            height: 150px; overflow-y: auto; text-align: left;
-        }
+        #log { background: #000; padding: 15px; height: 300px; overflow-y: scroll; border: 1px solid #333; white-space: pre-wrap; font-size: 0.9em; }
+        .highlight { color: #ffff00; font-weight: bold; }
+        .error { color: #ff5555; }
+        .success { color: #00ff00; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>🧠 MyndBand Visualizer</h1>
-    <p>Ensure your headset is ON and in pairing mode.</p>
+    <h1>🧠 MyndBand Universal Scanner</h1>
+    <p>1. Unpair from Windows Settings first.<br>2. Put headset in pairing mode (Fast Blink).<br>3. Click Connect.</p>
     
-    <div id="signal-quality">Status: Disconnected</div>
-    <button id="connectBtn">Connect Headset</button>
+    <button id="connectBtn">SCAN & CONNECT</button>
 
-    <div class="dashboard">
-        <div class="card">
-            <div class="label">Attention</div>
-            <div class="value" id="attention">--</div>
-        </div>
-        <div class="card">
-            <div class="label">Meditation</div>
-            <div class="value" id="meditation">--</div>
-        </div>
-        <div class="card">
-            <div class="label">Blink</div>
-            <div class="value" id="blink">--</div>
-        </div>
-        <div class="card">
-            <div class="label">Signal Poor</div>
-            <div class="value" id="poorSignal">--</div>
-        </div>
+    <div id="dashboard">
+        <div class="stat-box"><div class="stat-label">ATTENTION</div><div class="stat-val" id="att">--</div></div>
+        <div class="stat-box"><div class="stat-label">MEDITATION</div><div class="stat-val" id="med">--</div></div>
+        <div class="stat-box"><div class="stat-label">SIGNAL</div><div class="stat-val" id="sig">--</div></div>
+        <div class="stat-box"><div class="stat-label">RAW WAVE</div><div class="stat-val" id="raw">--</div></div>
     </div>
 
-    <div id="debug-log">Debug Log...</div>
+    <div id="log">Logs will appear here...</div>
 
     <script>
+        const logEl = document.getElementById('log');
         const connectBtn = document.getElementById('connectBtn');
-        const statusEl = document.getElementById('signal-quality');
-        const logEl = document.getElementById('debug-log');
         
-        // --- IMPORTANT: Service UUIDs ---
-        // 0xFE41 is the standard NeuroSky/MyndBand BLE service.
-        // 0xFFE0 is a generic Serial service used by some older modules.
-        const OPTIONAL_SERVICES = [
-            0xFE41, 
-            0xFFE0, 
-            "0000fe41-0000-1000-8000-00805f9b34fb",
-            "0000ffe0-0000-1000-8000-00805f9b34fb"
+        // Comprehensive list of Serial-over-BLE Service UUIDs
+        const SERVICE_LIST = [
+            "0000fe41-0000-1000-8000-00805f9b34fb", // NeuroSky Standard
+            "0000ffe0-0000-1000-8000-00805f9b34fb", // HM-10 / JDY-08 (Common in clones)
+            "6e400001-b5a3-f393-e0a9-e50e24dcca9e", // Nordic UART
+            "49535343-fe7d-4ae5-8fa9-9fafd205e455", // Microchip Transparent
+            "00001101-0000-1000-8000-00805f9b34fb"  // Generic Serial
         ];
 
-        let device, server, characteristic;
-
-        function log(msg) {
-            const time = new Date().toLocaleTimeString();
-            logEl.innerHTML += `<div>[${time}] ${msg}</div>`;
+        function log(msg, type = '') {
+            const line = document.createElement('div');
+            line.textContent = `> ${msg}`;
+            if(type) line.className = type;
+            logEl.appendChild(line);
             logEl.scrollTop = logEl.scrollHeight;
-            console.log(msg);
         }
 
         connectBtn.addEventListener('click', async () => {
             try {
-                updateStatus("Connecting...", "connecting");
-                
-                // 1. Request Device with SPECIFIC services
-                // We must list optionalServices or the browser will block access to them later
-                log("Requesting Bluetooth Device...");
-                device = await navigator.bluetooth.requestDevice({
-                    filters: [
-                        { namePrefix: 'Mynd' }, 
-                        { namePrefix: 'Mind' },
-                        { namePrefix: 'Brain' } // Sometimes named BrainLink
-                    ],
-                    optionalServices: OPTIONAL_SERVICES
+                log("Starting Scan...", "highlight");
+
+                // 1. Request Device with ALL known serial services
+                // We use acceptAllDevices: true to find it even if the name is weird
+                const device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true, 
+                    optionalServices: SERVICE_LIST
                 });
 
-                device.addEventListener('gattserverdisconnected', onDisconnected);
+                log(`Device Selected: "${device.name}"`, "highlight");
 
-                // 2. Connect to GATT Server
-                log(`Device selected: ${device.name}. Connecting to GATT...`);
-                server = await device.gatt.connect();
-                log("GATT Server connected.");
+                // 2. Connect to GATT
+                const server = await device.gatt.connect();
+                log("Connected to GATT Server. Scanning Services...");
 
-                // 3. Find the Serial Service
-                // We scan through the allowed services to find one that matches
-                let service = null;
+                // 3. Find THE Service
+                // We cannot list all services, only the ones we asked for in optionalServices.
+                // We will try to get each one.
                 
-                try {
-                    service = await server.getPrimaryService(0xFE41);
-                    log("Found NeuroSky Service (FE41)!");
-                } catch (e) {
-                    log("Service FE41 not found, trying FFE0...");
+                let foundService = null;
+                let foundChar = null;
+
+                const services = await server.getPrimaryServices();
+                log(`Device offers ${services.length} authorized services.`);
+
+                for (const service of services) {
+                    log(`Checking Service: ${service.uuid}`);
+                    
                     try {
-                        service = await server.getPrimaryService(0xFFE0);
-                        log("Found Generic Serial Service (FFE0)!");
-                    } catch (e2) {
-                        throw new Error("Could not find a supported Serial Service (FE41 or FFE0).");
+                        const chars = await service.getCharacteristics();
+                        for (const char of chars) {
+                            log(`  - Found Char: ${char.uuid} [Props: ${Object.keys(char.properties).filter(k=>char.properties[k]).join(',')}]`);
+                            
+                            // We need a characteristic that supports NOTIFY
+                            if (char.properties.notify) {
+                                log(`  >>> MATCH! Found Data Stream!`, "success");
+                                foundService = service;
+                                foundChar = char;
+                                break; 
+                            }
+                        }
+                    } catch(e) {
+                        log(`  - Error checking chars: ${e}`);
                     }
+                    if (foundChar) break;
                 }
 
-                // 4. Get the Characteristic (The data stream)
-                log("Getting Characteristics...");
-                const characteristics = await service.getCharacteristics();
-                
-                // Look for a characteristic that supports 'Notify' (streaming data)
-                characteristic = characteristics.find(c => c.properties.notify);
-                
-                if (!characteristic) {
-                    throw new Error("No Notify characteristic found in service.");
+                if (!foundChar) {
+                    throw new Error("Connected, but no Serial/Notify characteristic found in known services.");
                 }
-                
-                log(`Connected to Characteristic: ${characteristic.uuid}`);
 
-                // 5. Start Listening
-                await characteristic.startNotifications();
-                characteristic.addEventListener('characteristicvaluechanged', handleData);
-                
-                updateStatus("Connected & Streaming", "good-signal");
+                // 4. Start Streaming
+                log("Starting Notifications...", "highlight");
+                await foundChar.startNotifications();
+                foundChar.addEventListener('characteristicvaluechanged', handleData);
+                log("LISTENING FOR DATA...", "success");
                 connectBtn.disabled = true;
-                connectBtn.innerText = "Connected";
+                connectBtn.innerText = "CONNECTED";
 
-            } catch (error) {
-                log(`ERROR: ${error.message}`);
-                updateStatus("Error: See Log", "bad-signal");
+            } catch (err) {
+                log(`ERROR: ${err.message}`, "error");
+                if(err.message.includes("no Serial")) {
+                    log("Tip: Try unpairing the device from Windows settings first.");
+                }
             }
         });
 
-        function onDisconnected() {
-            updateStatus("Disconnected", "bad-signal");
-            connectBtn.disabled = false;
-            connectBtn.innerText = "Connect Headset";
-            log("Bluetooth device disconnected.");
-        }
-
-        function updateStatus(text, className) {
-            statusEl.innerText = `Status: ${text}`;
-            statusEl.className = className;
-        }
-
-        // --- DATA PARSING (ThinkGear Protocol) ---
-        // Same parser as before, but safer buffer handling
+        // --- PARSER ---
         let buffer = [];
-
+        
         function handleData(event) {
-            const value = event.target.value;
-            for (let i = 0; i < value.byteLength; i++) {
-                buffer.push(value.getUint8(i));
-            }
+            const data = new Uint8Array(event.target.value.buffer);
+            data.forEach(b => buffer.push(b));
             
-            // Limit buffer size to prevent memory leaks if we get desynced
-            if (buffer.length > 2048) buffer.shift(); 
+            // Keep buffer reasonable
+            if (buffer.length > 512) buffer.shift();
 
-            parseBuffer();
-        }
-
-        function parseBuffer() {
             while (buffer.length >= 3) {
-                // Check for Sync bytes [0xAA, 0xAA]
+                // Look for Sync [AA, AA]
                 if (buffer[0] !== 0xAA || buffer[1] !== 0xAA) {
                     buffer.shift();
                     continue;
                 }
 
-                const payloadLength = buffer[2];
-                if (buffer.length < 3 + payloadLength + 1) break; // Wait for more data
+                const len = buffer[2];
+                if (buffer.length < 3 + len + 1) break; // Wait for more data
 
-                // Extract packet
-                const packet = buffer.slice(3, 3 + payloadLength);
-                const checksum = buffer[3 + payloadLength];
-
-                // Verify Checksum
-                const sum = packet.reduce((a, b) => a + b, 0);
-                const calculatedChecksum = (~sum) & 0xFF;
-
-                if (checksum === calculatedChecksum) {
-                    decodePayload(packet);
+                const payload = buffer.slice(3, 3 + len);
+                const checksum = buffer[3 + len];
+                const sum = payload.reduce((a, b) => a + b, 0);
+                
+                if (((~sum) & 0xFF) === checksum) {
+                    parsePacket(payload);
                 } else {
-                    log("Checksum Error (Weak Signal?)");
+                    log("Checksum fail", "error");
                 }
-
-                // Move buffer forward
-                buffer.splice(0, 3 + payloadLength + 1);
+                
+                buffer.splice(0, 3 + len + 1);
             }
         }
 
-        function decodePayload(payload) {
+        function parsePacket(payload) {
             let i = 0;
             while (i < payload.length) {
-                const code = payload[i];
-                i++;
-                
-                if (code === 0x02) { // Signal Quality (0 = Good, 200 = Off Head)
-                    const val = payload[i];
-                    document.getElementById('poorSignal').innerText = val;
-                    if(val === 0) updateStatus("Signal: Good", "good-signal");
-                    else if(val === 200) updateStatus("Sensors Off Head", "bad-signal");
-                    else updateStatus("Signal: Noisy", "connecting");
-                    i++;
+                const code = payload[i++];
+                if (code === 0x02) { // Signal Quality
+                    const val = payload[i++];
+                    document.getElementById('sig').innerText = val === 0 ? "GOOD" : (val === 200 ? "OFF" : val);
+                    document.getElementById('sig').style.color = val === 0 ? "#00ff00" : "#ff5555";
                 } 
-                else if (code === 0x04) { // Attention
-                    document.getElementById('attention').innerText = payload[i];
-                    i++;
+                else if (code === 0x04) document.getElementById('att').innerText = payload[i++];
+                else if (code === 0x05) document.getElementById('med').innerText = payload[i++];
+                else if (code === 0x80) { // Raw Wave (2 bytes)
+                    i++; // length
+                    const val = (payload[i++] << 8) | payload[i++];
+                    const raw = val >= 32768 ? val - 65536 : val;
+                    document.getElementById('raw').innerText = raw;
                 } 
-                else if (code === 0x05) { // Meditation
-                    document.getElementById('meditation').innerText = payload[i];
-                    i++;
-                } 
-                else if (code === 0x16) { // Blink
-                    document.getElementById('blink').innerText = payload[i];
-                    log(`Blink Detected! Strength: ${payload[i]}`);
-                    i++;
-                } 
-                else if (code === 0x80) { // Raw Wave (Length = 2)
-                    i += 1; // Skip length byte (always 2)
-                    i += 2; // Skip value bytes (we aren't graphing raw wave here)
-                }
-                else if (code === 0x83) { // EEG Bands (Length = 24)
-                    i += 25; // Skip (1 length byte + 24 data bytes)
+                else if (code === 0x83) { // Bands (24 bytes)
+                    i += 25; 
                 }
                 else {
-                    // Unknown code, just stop parsing this packet to be safe
+                    // Unknown code, exit to prevent desync
                     break;
                 }
             }
