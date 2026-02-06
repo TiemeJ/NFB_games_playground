@@ -3,163 +3,196 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand Deep Debug</title>
+    <title>MyndBand Kickstart Tool</title>
     <style>
-        body { font-family: 'Courier New', monospace; background: #111; color: #0f0; padding: 20px; max-width: 900px; margin: 0 auto; }
-        h1 { border-bottom: 1px solid #333; padding-bottom: 10px; color: #fff; }
+        body { font-family: 'Courier New', monospace; background: #1a1a1a; color: #00ff00; padding: 20px; max-width: 900px; margin: 0 auto; }
         
-        .status-box { padding: 10px; border: 1px solid #444; margin-bottom: 20px; background: #222; }
-        .status-ok { color: #0f0; font-weight: bold; }
-        .status-err { color: #f55; font-weight: bold; }
+        /* Status Bar */
+        .status-container { background: #333; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #555; display: flex; justify-content: space-between; align-items: center; }
+        .status-val { font-weight: bold; color: #fff; }
+        .byte-counter { font-size: 1.2em; color: #00d2ff; }
 
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-        button { padding: 15px; font-family: inherit; font-weight: bold; cursor: pointer; border: none; }
+        /* Controls */
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        button { padding: 18px; font-family: inherit; font-weight: bold; font-size: 16px; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; }
+        
         #btnConnect { background: #007bff; color: white; }
-        #btnKick { background: #d35400; color: white; }
-        button:disabled { background: #555; cursor: not-allowed; }
+        #btnConnect:hover { background: #0056b3; }
+        
+        #btnKick { background: #e67e22; color: white; opacity: 0.5; cursor: not-allowed; }
+        #btnKick:not(:disabled) { opacity: 1; cursor: pointer; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(230, 126, 34, 0); } 100% { box-shadow: 0 0 0 0 rgba(230, 126, 34, 0); } }
 
-        #data-log { 
-            background: #000; border: 1px solid #444; height: 300px; 
-            overflow-y: scroll; padding: 10px; white-space: pre-wrap; 
-            font-size: 0.9em; line-height: 1.4; color: #ccc;
-        }
-        .byte-stream { color: #888; word-break: break-all; margin-top: 10px; }
-        .parsed-val { color: #fff; font-weight: bold; }
-        .sync-byte { color: #007bff; }
+        /* Log */
+        #log { background: #000; border: 1px solid #444; height: 350px; overflow-y: scroll; padding: 15px; white-space: pre-wrap; font-size: 0.85em; color: #ccc; }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .log-success { color: #2ecc71; font-weight: bold; }
+        .log-warn { color: #f1c40f; }
+        .log-err { color: #e74c3c; }
+        .log-info { color: #3498db; }
+        
+        .hex-stream { color: #888; font-size: 0.8em; margin-top: 10px; word-break: break-all; }
+        .sync { color: #00d2ff; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <h1>🕵️ MyndBand Raw Inspector</h1>
-    
-    <div class="status-box">
-        STATUS: <span id="status">Disconnected</span><br>
-        BYTES RECEIVED: <span id="byteCount">0</span>
+    <h1>🧠 MyndBand Kickstart Tool</h1>
+
+    <div class="status-container">
+        <div>STATUS: <span id="status" class="status-val">Disconnected</span></div>
+        <div>BYTES: <span id="byteCount" class="byte-counter">0</span></div>
     </div>
 
     <div class="controls">
-        <button id="btnConnect">1. CONNECT (Deep Scan)</button>
-        <button id="btnKick" disabled>2. KICKSTART (If Silent)</button>
+        <button id="btnConnect">1. CONNECT & SCAN</button>
+        <button id="btnKick" disabled>2. KICKSTART (Send 'Start')</button>
     </div>
 
-    <div id="data-log">Log is empty... waiting for connection.</div>
+    <div id="log">Logs will appear here...</div>
 
     <script>
         const btnConnect = document.getElementById('btnConnect');
         const btnKick = document.getElementById('btnKick');
         const statusEl = document.getElementById('status');
-        const logEl = document.getElementById('data-log');
         const byteCountEl = document.getElementById('byteCount');
+        const logEl = document.getElementById('log');
 
-        const TARGET_SERVICE = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
-        
-        let device, server, notifyChar, writeChar;
+        const TARGET_SERVICE = "039afff0-2c94-11e3-9e06-0002a5d5c51b"; // The one we found
+        let writeChar = null;
         let totalBytes = 0;
 
-        function log(msg, isRaw = false) {
-            if(isRaw) {
-                // Just append text for raw data to avoid newline spam
-                logEl.innerHTML += msg + " ";
-            } else {
-                const div = document.createElement('div');
-                div.innerHTML = `> ${msg}`;
-                div.style.color = "#0f0";
-                logEl.appendChild(div);
-            }
+        function log(msg, type = '') {
+            const d = document.createElement('div');
+            d.className = `log-entry log-${type}`;
+            d.innerText = `> ${msg}`;
+            logEl.appendChild(d);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function logRaw(hex) {
+            // Append raw hex to the last log entry or a new container
+            const s = document.createElement('span');
+            s.innerHTML = hex + " ";
+            s.style.color = "#888";
+            logEl.appendChild(s);
             logEl.scrollTop = logEl.scrollHeight;
         }
 
         btnConnect.addEventListener('click', async () => {
             try {
-                log("Requesting Device...");
-                device = await navigator.bluetooth.requestDevice({
-                    acceptAllDevices: true,
+                log("Scanning...", "info");
+                
+                // 1. FILTERED SCAN
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [
+                        { namePrefix: 'Mynd' }, 
+                        { namePrefix: 'Mind' },
+                        { namePrefix: 'Brain' }
+                    ],
                     optionalServices: [TARGET_SERVICE]
                 });
 
-                log(`Device: ${device.name}`);
-                server = await device.gatt.connect();
-                log("GATT Connected.");
-
+                log(`Device Selected: ${device.name}`, "success");
+                
+                const server = await device.gatt.connect();
+                statusEl.innerText = "Connected";
+                
+                log("Getting Service...", "info");
                 const service = await server.getPrimaryService(TARGET_SERVICE);
-                log(`Service ${TARGET_SERVICE} found.`);
-
+                
+                log("Scanning Characteristics...", "info");
                 const chars = await service.getCharacteristics();
-                log(`Found ${chars.length} characteristics in service.`);
 
-                // Find Notify (Read) and Write characteristics
-                notifyChar = chars.find(c => c.properties.notify);
-                writeChar = chars.find(c => c.properties.write || c.properties.writeWithoutResponse);
+                // 2. FIND WRITE & NOTIFY CHANNELS
+                let notifyChar = null;
 
-                if(writeChar) {
-                    log(`Write Channel Found: ${writeChar.uuid}`);
+                for (const c of chars) {
+                    const uuid = c.uuid.split('-')[0]; // Short UUID for readability
+                    const props = [];
+                    if (c.properties.read) props.push("READ");
+                    if (c.properties.write) props.push("WRITE");
+                    if (c.properties.writeWithoutResponse) props.push("WRITE_NO_RESP");
+                    if (c.properties.notify) props.push("NOTIFY");
+
+                    log(`Found Char: ...${uuid} [${props.join(', ')}]`);
+
+                    // Logic to pick the best candidates
+                    if (c.properties.notify) notifyChar = c;
+                    
+                    // We accept regular Write OR WriteWithoutResponse
+                    if (c.properties.write || c.properties.writeWithoutResponse) {
+                        writeChar = c;
+                    }
+                }
+
+                if (!notifyChar) throw new Error("No Notify Channel Found!");
+
+                // 3. START LISTENING
+                await notifyChar.startNotifications();
+                notifyChar.addEventListener('characteristicvaluechanged', handleData);
+                log("Listening for data...", "success");
+                statusEl.innerText = "Streaming";
+                
+                btnConnect.disabled = true;
+                btnConnect.innerText = "CONNECTED";
+
+                // 4. ENABLE KICKSTART IF WRITE FOUND
+                if (writeChar) {
+                    log(`Write Channel Found: ...${writeChar.uuid.split('-')[0]}`, "success");
                     btnKick.disabled = false;
+                    btnKick.innerText = "2. KICKSTART (Click Me!)";
                 } else {
-                    log("No Write Channel found (Passive Mode).");
+                    log("Warning: No Write Channel found. Device might be Read-Only.", "warn");
                 }
 
-                if(notifyChar) {
-                    log(`Subscribing to Notify: ${notifyChar.uuid}`);
-                    await notifyChar.startNotifications();
-                    notifyChar.addEventListener('characteristicvaluechanged', handleRawData);
-                    statusEl.innerText = "CONNECTED & LISTENING";
-                    statusEl.className = "status-ok";
-                    btnConnect.disabled = true;
-                    log("--- STREAM STARTED. WATCH BELOW ---");
-                } else {
-                    log("ERROR: No Notify characteristic found!", "err");
-                }
-
-            } catch(e) {
-                log(`ERROR: ${e.message}`);
-                statusEl.innerText = "Error";
-                statusEl.className = "status-err";
+            } catch (err) {
+                log(err.message, "err");
             }
         });
 
-        // KICKSTART: Try to force the device to talk
         btnKick.addEventListener('click', async () => {
-            if(!writeChar) return;
-            log("Sending 'Start' commands...");
+            if (!writeChar) return;
+            log("Sending Start Commands...", "warn");
+            
             try {
-                // Common commands for serial bridges
-                const cmd1 = new Uint8Array([0x01]); // Often "Start"
-                const cmd2 = new TextEncoder().encode("b"); // Sometimes text command
-                
+                // Command 1: Hex 0x01 (Common "On" byte)
+                const cmd1 = new Uint8Array([0x01]);
                 await writeChar.writeValue(cmd1);
-                log("Sent Byte: 0x01");
-                
-                // Wait a bit and try another if needed
+                log("Sent: 0x01");
+
+                // Command 2: ASCII 'b' (Some bridges need text)
                 setTimeout(async () => {
-                     // await writeChar.writeValue(cmd2); // Uncomment if needed
-                }, 500);
-            } catch(e) {
-                log(`Write Error: ${e.message}`);
+                    const cmd2 = new TextEncoder().encode("b");
+                    await writeChar.writeValue(cmd2);
+                    log("Sent: 'b'");
+                }, 200);
+
+                // Command 3: Hex 0xC0 (NeuroSky 'Connect' opcode)
+                setTimeout(async () => {
+                    const cmd3 = new Uint8Array([0xC0]);
+                    await writeChar.writeValue(cmd3);
+                    log("Sent: 0xC0");
+                }, 400);
+
+            } catch (e) {
+                log("Write failed: " + e.message, "err");
             }
         });
 
-        // RAW DATA HANDLER
-        // We print every byte. If we see "AA AA", we highlight it.
-        function handleRawData(event) {
+        function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
             totalBytes += data.byteLength;
             byteCountEl.innerText = totalBytes;
 
-            let hexString = "";
-            for(let i=0; i<data.length; i++) {
+            let html = "";
+            for (let i = 0; i < data.length; i++) {
                 const b = data[i];
                 const h = b.toString(16).toUpperCase().padStart(2, '0');
-                
-                // Highlight ThinkGear Sync Bytes
-                if(b === 0xAA) {
-                    hexString += `<span class="sync-byte">${h}</span> `;
-                } else {
-                    hexString += `${h} `;
-                }
+                if (b === 0xAA) html += `<span class="sync">${h}</span> `;
+                else html += h + " ";
             }
-            
-            // Print raw hex to screen
-            log(hexString, true);
+            logRaw(html);
         }
     </script>
 </body>
