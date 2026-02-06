@@ -3,42 +3,60 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand Visualizer (Corrected)</title>
+    <title>MyndBand Dashboard & Graph</title>
+    
+    <!-- Load Chart.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
     <style>
         body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 30px; color: #333; }
         
         h1 { margin: 0; color: #2d3436; }
         .subtitle { color: #636e72; font-size: 0.9em; margin-bottom: 20px; }
         
+        /* Status Bar */
         #status-box { padding: 10px 20px; background: #dfe6e9; border-radius: 30px; font-weight: bold; color: #636e72; margin-bottom: 20px; transition: 0.3s; }
         .connected { background: #00b894 !important; color: #fff !important; }
         
+        /* Button */
         button { padding: 15px 40px; font-size: 18px; font-weight: bold; background: #0984e3; color: white; border: none; border-radius: 10px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.2); }
         button:disabled { background: #b2bec3; transform: none; box-shadow: none; }
 
+        /* Grid Layout */
         .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 800px; margin-top: 30px; }
         .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); text-align: center; }
         
+        /* Typography */
         .label { font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; color: #b2bec3; font-weight: bold; margin-bottom: 10px; }
         .value { font-size: 4em; font-weight: bold; color: #2d3436; line-height: 1; }
         
+        /* Colors */
         .sig-good { color: #00b894; }
         .sig-bad { color: #d63031; }
         .sig-warn { color: #fdcb6e; }
 
+        /* Bars */
         .bar-bg { width: 100%; height: 12px; background: #f1f2f6; border-radius: 6px; margin-top: 15px; overflow: hidden; }
         .bar-fill { height: 100%; width: 0%; transition: width 0.4s ease-out; }
 
-        .debug-area { margin-top: 40px; width: 100%; max-width: 800px; font-family: 'Courier New', monospace; font-size: 0.8em; }
-        .debug-title { font-weight: bold; color: #b2bec3; border-bottom: 1px solid #ddd; margin-bottom: 5px; }
-        #hex-log { color: #636e72; word-break: break-all; line-height: 1.5; }
+        /* Graph Container */
+        .graph-container { 
+            background: white; 
+            padding: 20px; 
+            border-radius: 15px; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05); 
+            width: 100%; 
+            max-width: 800px; 
+            margin-top: 20px; 
+            height: 350px;
+        }
     </style>
 </head>
 <body>
 
     <h1>🧠 MyndBand Visualizer</h1>
-    <div class="subtitle">Targeting Channel: ...fff8 (Data Stream)</div>
+    <div class="subtitle">Focus & Relaxation Tracker</div>
     
     <div id="status-box">Ready</div>
     <button id="connectBtn">CONNECT</button>
@@ -66,21 +84,68 @@
         </div>
     </div>
 
-    <div class="debug-area">
-        <div class="debug-title">LIVE DATA STREAM (Hex)</div>
-        <div id="hex-log">Waiting for data...</div>
+    <!-- GRAPH AREA -->
+    <div class="graph-container">
+        <canvas id="brainChart"></canvas>
     </div>
 
     <script>
-        const btn = document.getElementById('connectBtn');
-        const statusBox = document.getElementById('status-box');
-        const hexLog = document.getElementById('hex-log');
-
+        // --- CONFIGURATION ---
         const SERVICE_UUID = "039afff0-2c94-11e3-9e06-0002a5d5c51b"; 
-        
-        // This is the CRITICAL fix: Targeting the 'fff8' characteristic explicitly
         const DATA_CHAR_UUID = "039afff8-2c94-11e3-9e06-0002a5d5c51b";
 
+        const btn = document.getElementById('connectBtn');
+        const statusBox = document.getElementById('status-box');
+
+        // --- CHART INITIALIZATION ---
+        const ctx = document.getElementById('brainChart').getContext('2d');
+        const brainChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [], // Time stamps
+                datasets: [
+                    {
+                        label: 'Focus',
+                        borderColor: '#e17055', // Orange
+                        backgroundColor: 'rgba(225, 112, 85, 0.1)',
+                        data: [],
+                        tension: 0.3, // Smooth curves
+                        borderWidth: 3,
+                        pointRadius: 0
+                    },
+                    {
+                        label: 'Relaxation',
+                        borderColor: '#00cec9', // Teal
+                        backgroundColor: 'rgba(0, 206, 201, 0.1)',
+                        data: [],
+                        tension: 0.3,
+                        borderWidth: 3,
+                        pointRadius: 0
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 0 }, // Disable animation for performance
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100, // Lock scale to 0-100
+                        grid: { color: '#f0f0f0' }
+                    },
+                    x: {
+                        display: false, // Hide time labels for cleaner look
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    legend: { position: 'top' }
+                }
+            }
+        });
+
+        // --- BLUETOOTH CONNECTION ---
         btn.addEventListener('click', async () => {
             try {
                 statusBox.innerText = "Scanning...";
@@ -95,21 +160,14 @@
                 const service = await server.getPrimaryService(SERVICE_UUID);
                 
                 statusBox.innerText = "Getting Data Channel...";
-                
-                // Try to get the specific fff8 channel first
                 let notifyChar = null;
+                
+                // Try specific char, fallback to search if needed
                 try {
                     notifyChar = await service.getCharacteristic(DATA_CHAR_UUID);
                 } catch(e) {
-                    console.warn("Direct access to fff8 failed, scanning all...", e);
-                    // Fallback: If direct access fails, loop and find the one ending in fff8
                     const chars = await service.getCharacteristics();
-                    for(const c of chars) {
-                        if(c.uuid.includes("fff8") && c.properties.notify) {
-                            notifyChar = c;
-                            break;
-                        }
-                    }
+                    notifyChar = chars.find(c => c.uuid.includes("fff8") && c.properties.notify);
                 }
 
                 if (!notifyChar) throw new Error("Could not find Data Channel (fff8)");
@@ -124,7 +182,6 @@
 
             } catch (e) {
                 statusBox.innerText = "Error: " + e.message;
-                console.error(e);
             }
         });
 
@@ -133,19 +190,10 @@
 
         function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
-            
-            // Update Log
-            let hexStr = "";
-            for(let b of data) {
-                buffer.push(b);
-                hexStr += b.toString(16).toUpperCase().padStart(2, '0') + " ";
-            }
-            if (hexLog.innerText.length > 200) hexLog.innerText = hexLog.innerText.slice(0, 200) + "..."; 
-            hexLog.innerHTML = hexStr + " " + hexLog.innerHTML;
+            for(let b of data) buffer.push(b);
+            if(buffer.length > 512) buffer.shift();
 
-            // Scan for signature: 02 [Sig] 04 [Att] 05 [Med]
-            if(buffer.length > 1024) buffer.shift();
-
+            // Pattern: 02 [Sig] 04 [Att] 05 [Med]
             for (let i = 0; i < buffer.length - 5; i++) {
                 if (buffer[i] === 0x02 && buffer[i+2] === 0x04 && buffer[i+4] === 0x05) {
                     
@@ -154,13 +202,17 @@
                     const meditation = buffer[i+5];
 
                     updateUI(signal, attention, meditation);
+                    updateGraph(attention, meditation);
+                    
                     buffer.splice(0, i + 6);
                     return; 
                 }
             }
         }
 
+        // --- UI UPDATES ---
         function updateUI(sig, att, med) {
+            // Signal
             const sigVal = document.getElementById('sig-val');
             const sigDesc = document.getElementById('sig-desc');
 
@@ -178,11 +230,29 @@
                 sigDesc.innerText = `Interference: ${sig}`;
             }
 
+            // Text Values
             document.getElementById('att-val').innerText = att;
             document.getElementById('att-bar').style.width = att + "%";
-            
             document.getElementById('med-val').innerText = med;
             document.getElementById('med-bar').style.width = med + "%";
+        }
+
+        function updateGraph(att, med) {
+            const timestamp = new Date().toLocaleTimeString();
+            
+            // Add new data
+            brainChart.data.labels.push(timestamp);
+            brainChart.data.datasets[0].data.push(att);
+            brainChart.data.datasets[1].data.push(med);
+
+            // Keep only last 60 points (approx 60 seconds)
+            if (brainChart.data.labels.length > 60) {
+                brainChart.data.labels.shift();
+                brainChart.data.datasets[0].data.shift();
+                brainChart.data.datasets[1].data.shift();
+            }
+
+            brainChart.update();
         }
     </script>
 </body>
