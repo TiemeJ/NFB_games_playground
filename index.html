@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand 512Hz Raw Unlocker</title>
+    <title>MyndBand 512Hz - Split Channel Fix</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -13,17 +13,14 @@
         h1 { margin: 0; color: #2d3436; }
         .subtitle { color: #636e72; font-size: 0.9em; margin-bottom: 20px; }
         
-        /* Status Bar */
         #status-box { padding: 10px 20px; background: #dfe6e9; border-radius: 30px; font-weight: bold; color: #636e72; margin-bottom: 20px; transition: 0.3s; }
         .connected { background: #00b894 !important; color: #fff !important; }
         .error { background: #d63031 !important; color: #fff !important; }
         
-        /* Button */
         button { padding: 15px 40px; font-size: 18px; font-weight: bold; background: #0984e3; color: white; border: none; border-radius: 10px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.2); }
         button:disabled { background: #b2bec3; transform: none; box-shadow: none; }
 
-        /* Grid Layout */
         .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 800px; margin-top: 30px; }
         .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); text-align: center; }
         
@@ -37,7 +34,6 @@
         .bar-bg { width: 100%; height: 12px; background: #f1f2f6; border-radius: 6px; margin-top: 15px; overflow: hidden; }
         .bar-fill { height: 100%; width: 0%; transition: width 0.4s ease-out; }
 
-        /* RAW OSCILLOSCOPE (New) */
         .scope-container {
             background: #000;
             padding: 10px;
@@ -64,7 +60,6 @@
             pointer-events: none;
         }
 
-        /* Standard Graph Container */
         .graph-container { 
             background: white; 
             padding: 20px; 
@@ -87,24 +82,22 @@
             text-align: left;
         }
 
-        /* Band Cards */
         .band-dashboard { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; width: 100%; max-width: 800px; margin-top: 10px; }
         .band-card { background: white; padding: 15px 10px; border-radius: 12px; box-shadow: 0 3px 10px rgba(0,0,0,0.05); text-align: center; }
         .band-label { font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.5px; color: #b2bec3; font-weight: bold; margin-bottom: 5px; }
         .band-hz { font-size: 0.65em; color: #ccc; margin-bottom: 8px; }
         .band-value { font-size: 1.4em; font-weight: bold; color: #2d3436; line-height: 1; }
-
     </style>
 </head>
 <body>
 
-    <h1>⚡ MyndBand 512Hz Unlocker</h1>
-    <div class="subtitle">Direct Serial Bridge (HM-10) Interface</div>
+    <h1>⚡ MyndBand 512Hz Split-Mode</h1>
+    <div class="subtitle">Separate Command (fff4) & Data (fff8) Channels</div>
     
-    <div id="status-box">Ready to Unlock</div>
-    <button id="connectBtn">CONNECT & UNLOCK</button>
+    <div id="status-box">Ready</div>
+    <button id="connectBtn">CONNECT</button>
 
-    <div class="section-header">⚡ Raw EEG Signal (512Hz)</div>
+    <div class="section-header">⚡ Raw EEG (512Hz)</div>
     <div class="scope-container">
         <div class="scope-overlay">SCALE: ±2048 µV | BUFFER: 512Hz</div>
         <canvas id="rawScope"></canvas>
@@ -116,13 +109,11 @@
             <div class="value sig-bad" id="sig-val">--</div>
             <div style="font-size: 0.9em; margin-top: 5px; color: #aaa;" id="sig-desc">Connect headset</div>
         </div>
-
         <div class="card">
             <div class="label">Focus</div>
             <div class="value" id="att-val">0</div>
             <div class="bar-bg"><div class="bar-fill" id="att-bar" style="background: #e17055;"></div></div>
         </div>
-
         <div class="card">
             <div class="label">Relaxation</div>
             <div class="value" id="med-val">0</div>
@@ -147,27 +138,28 @@
     </div>
 
     <div class="section-header">🔍 Debug Log <button onclick="document.getElementById('debug-log').innerText=''" style="font-size:12px;">Clear</button></div>
-    <pre id="debug-log" style="background:#1e1e1e; color:#0f0; padding:15px; border-radius:10px; width:100%; max-width:800px; height:200px; overflow-y:auto; font-size:11px; font-family:monospace; white-space:pre-wrap; word-break:break-all;">Waiting for connection...</pre>
+    <pre id="debug-log" style="background:#1e1e1e; color:#0f0; padding:15px; border-radius:10px; width:100%; max-width:800px; height:200px; overflow-y:auto; font-size:11px; font-family:monospace; white-space:pre-wrap; word-break:break-all;">Waiting...</pre>
 
     <script>
         // --- CONFIGURATION ---
-        // PRIMARY TARGET: HM-10 Serial Bridge
         const HM10_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb";
-        const HM10_CHAR    = "0000ffe1-0000-1000-8000-00805f9b34fb";
-        
-        // SECONDARY TARGET: Old MyndBand Service (just in case)
         const OLD_SERVICE  = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
 
         const btn = document.getElementById('connectBtn');
         const statusBox = document.getElementById('status-box');
         const debugLog = document.getElementById('debug-log');
 
-        // --- SCOPE VISUALIZER (Raw Canvas for Speed) ---
+        function log(msg) {
+            console.log(msg);
+            debugLog.innerText += "\n" + msg;
+            debugLog.scrollTop = debugLog.scrollHeight;
+        }
+
+        // --- SCOPE (Visualizer) ---
         const scopeCanvas = document.getElementById('rawScope');
         const ctx = scopeCanvas.getContext('2d');
-        let rawBuffer = new Array(1024).fill(0); // Holds last 2 seconds of 512Hz data
-        
-        // Resize canvas to actual display size
+        let rawBuffer = new Array(1024).fill(0); 
+
         function resizeScope() {
             scopeCanvas.width = scopeCanvas.offsetWidth;
             scopeCanvas.height = scopeCanvas.offsetHeight;
@@ -179,20 +171,17 @@
             const w = scopeCanvas.width;
             const h = scopeCanvas.height;
             const mid = h / 2;
-            const scale = h / 2000; // Adjust sensitivity here (2000uV range)
+            const scale = h / 2000; 
 
             ctx.fillStyle = "#000";
             ctx.fillRect(0, 0, w, h);
-
             ctx.lineWidth = 2;
             ctx.strokeStyle = "#00ff00";
             ctx.beginPath();
 
             const step = w / rawBuffer.length;
-            
             for(let i = 0; i < rawBuffer.length; i++) {
                 const x = i * step;
-                // Invert Y so positive is up
                 const y = mid - (rawBuffer[i] * scale);
                 if (i===0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
@@ -200,53 +189,26 @@
             ctx.stroke();
             requestAnimationFrame(drawScope);
         }
-        // Start the render loop immediately
         drawScope();
 
-        // --- CHART.JS SETUP (For slower metrics) ---
+        // --- CHART.JS ---
         const brainChart = new Chart(document.getElementById('brainChart').getContext('2d'), {
             type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    { label: 'Focus', borderColor: '#e17055', data: [], tension: 0.3, pointRadius: 0 },
-                    { label: 'Relaxation', borderColor: '#00cec9', data: [], tension: 0.3, pointRadius: 0 }
-                ]
-            },
-            options: {
-                responsive: true, maintainAspectRatio: false, animation: { duration: 0 },
-                scales: { y: { beginAtZero: true, max: 100 }, x: { display: false } }
-            }
+            data: { labels: [], datasets: [ { label: 'Focus', borderColor: '#e17055', data: [] }, { label: 'Relaxation', borderColor: '#00cec9', data: [] } ] },
+            options: { responsive: true, maintainAspectRatio: false, animation: { duration: 0 }, scales: { y: { beginAtZero: true, max: 100 }, x: { display: false } } }
         });
 
-        // --- DATA STATE ---
-        const BAND_NAMES = ['delta','theta','lowAlpha','highAlpha','lowBeta','highBeta','lowGamma','midGamma'];
-        const CODE_TO_BAND = { 0x06:0, 0x07:1, 0x08:2, 0x09:3, 0x0A:4, 0x0B:5, 0x0C:6, 0x0D:7 };
+        // --- DATA ---
         let currentBands = [0,0,0,0,0,0,0,0];
-        let lastSignal = 200;
+        const BAND_NAMES = ['delta','theta','lowAlpha','highAlpha','lowBeta','highBeta','lowGamma','midGamma'];
 
-        // --- LOGGING ---
-        function log(msg) {
-            console.log(msg);
-            debugLog.innerText += "\n" + msg;
-            debugLog.scrollTop = debugLog.scrollHeight;
-        }
-
-        // --- BLUETOOTH CONNECTION ---
+        // --- BLUETOOTH ---
         btn.addEventListener('click', async () => {
             try {
-                statusBox.innerText = "Scanning for HM-10 / MyndBand...";
+                statusBox.innerText = "Scanning...";
                 
-                // We request BOTH services. 
-                // The device likely advertises one but allows connection to the other.
                 const device = await navigator.bluetooth.requestDevice({
-                    filters: [
-                        { namePrefix: 'Mynd' }, 
-                        { namePrefix: 'Mind' }, 
-                        { namePrefix: 'Brain' },
-                        { services: [HM10_SERVICE] }, // Try finding by service
-                        { services: [OLD_SERVICE] }
-                    ],
+                    filters: [ { namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' } ],
                     optionalServices: [HM10_SERVICE, OLD_SERVICE, "0000ffe0-0000-1000-8000-00805f9b34fb"]
                 });
 
@@ -257,80 +219,66 @@
                     btn.innerText = "RECONNECT";
                 });
 
-                statusBox.innerText = "Connecting GATT...";
                 const server = await device.gatt.connect();
-
-                // 1. Try to get the HM-10 Service (FFE0)
                 let service = null;
-                let char = null;
-                let usedService = "";
+                let commandChar = null; // We write to this
+                let dataChar = null;    // We listen to this
 
+                // 1. Try HM-10 (Simple mode: Write & Read on same char)
                 try {
-                    log("Attempting HM-10 Service (ffe0)...");
                     service = await server.getPrimaryService(HM10_SERVICE);
-                    char = await service.getCharacteristic(HM10_CHAR);
-                    usedService = "HM-10 (ffe0)";
-                    log("✅ Found HM-10 Service!");
+                    const c = await service.getCharacteristic("0000ffe1-0000-1000-8000-00805f9b34fb");
+                    commandChar = c;
+                    dataChar = c;
+                    log("✅ Connected via HM-10 (Unified Channel)");
                 } catch (e) {
-                    log("⚠️ HM-10 Service not primary. Trying fallback...");
+                    log("⚠️ HM-10 not found. Trying MyndBand Native...");
+                    
+                    // 2. Try Old Service (Split mode: Write fff4, Read fff8)
                     try {
                         service = await server.getPrimaryService(OLD_SERVICE);
-                        // Even if we use the old service UUID, we look for ffe1 characteristic or fff8
-                        // But based on your logs, we NEED ffe1 for the unlock command.
-                        // Sometimes ffe0 is hidden inside the old service context or accessible as secondary.
-                        log("Found Old Service. Checking characteristics...");
+                        const chars = await service.getCharacteristics();
+                        log(`Found Chars: ${chars.map(c => c.uuid.substring(4,8)).join(', ')}`);
+
+                        // Find Command (fff4)
+                        commandChar = chars.find(c => c.uuid.includes("fff4"));
+                        if (!commandChar) log("❌ Warning: Command Channel (fff4) missing!");
+
+                        // Find Data (fff8)
+                        dataChar = chars.find(c => c.uuid.includes("fff8"));
+                        if (!dataChar) log("❌ Warning: Data Channel (fff8) missing!");
+
+                        if (commandChar && dataChar) {
+                            log("✅ Connected via Native (Split Channels)");
+                            log(`📝 Writing to: ...${commandChar.uuid.substring(4,8)}`);
+                            log(`👂 Listening to: ...${dataChar.uuid.substring(4,8)}`);
+                        } else {
+                             throw new Error("Missing critical characteristics");
+                        }
                     } catch (err2) {
-                        throw new Error("Could not find any known service.");
+                        throw new Error("Could not find valid service/characteristics.");
                     }
                 }
 
-                if (!char && service) {
-                    // Try to find ANY notify characteristic if specific one failed
-                    const chars = await service.getCharacteristics();
-                    log(`Service has chars: ${chars.map(c => c.uuid).join(', ')}`);
-                    
-                    // Look for ffe1 specifically
-                    char = chars.find(c => c.uuid.includes("ffe1"));
-                    if (!char) char = chars.find(c => c.properties.notify);
+                // 3. Setup Listener
+                if (dataChar) {
+                    await dataChar.startNotifications();
+                    dataChar.addEventListener('characteristicvaluechanged', handleData);
+                    log("🎧 Listener Started");
                 }
 
-                if (!char) throw new Error("No usable characteristic found.");
-
-                log(`🔗 Connected via ${usedService}`);
-                log(`⚡ Target Characteristic: ${char.uuid}`);
-
-                // 2. Start Listeners
-                await char.startNotifications();
-                char.addEventListener('characteristicvaluechanged', handleData);
-                
-                statusBox.innerText = "Sending Unlock Command...";
-                statusBox.className = "sig-warn";
-                
-                // 3. THE UNLOCK COMMAND (0x02)
-                // This switches the baud rate to 57600 for raw data
-                try {
-                    const unlockCmd = new Uint8Array([0x02]);
-                    log("🚀 Sending 0x02 to Unlock Raw Mode...");
-                    
-                    // Try 'WriteWithResponse' first, fall back to 'WriteWithoutResponse'
-                    if (char.properties.write) {
-                        await char.writeValueWithResponse(unlockCmd);
-                        log("✅ Write (With Response) Success.");
-                    } else {
-                        await char.writeValueWithoutResponse(unlockCmd);
-                        log("✅ Write (No Response) Sent.");
-                    }
-                    
-                    statusBox.innerText = "Unlocked! Streaming 512Hz";
-                    statusBox.className = "connected";
-                    btn.disabled = true;
-                    btn.innerText = "Streaming";
-
-                } catch (e) {
-                    log("❌ Unlock Command Failed: " + e.message);
-                    statusBox.innerText = "Unlock Failed (Check Debug)";
-                    statusBox.className = "error";
+                // 4. Send Unlock Command
+                if (commandChar) {
+                    log("🚀 Sending Unlock (0x02)...");
+                    const cmd = new Uint8Array([0x02]);
+                    if (commandChar.properties.write) await commandChar.writeValueWithResponse(cmd);
+                    else await commandChar.writeValueWithoutResponse(cmd);
+                    log("✅ Unlock Command Sent");
                 }
+
+                statusBox.innerText = "Streaming 512Hz";
+                statusBox.className = "connected";
+                btn.disabled = true;
 
             } catch (e) {
                 log("Error: " + e.message);
@@ -339,89 +287,47 @@
         });
 
         // --- PARSER ---
-        // Buffer for incoming data chunks
         let parseBuffer = []; 
 
         function handleData(event) {
             const chunk = new Uint8Array(event.target.value.buffer);
-            // Add to buffer
             for(let i=0; i<chunk.length; i++) parseBuffer.push(chunk[i]);
-
-            // Process buffer
             processBuffer();
         }
 
         function processBuffer() {
-            // We look for valid packets in the buffer.
-            // MyndBand/NeuroSky packets usually start with:
-            // Sync: AA AA
-            // OR
-            // Raw Code: 80 (if "naked")
-
             while (parseBuffer.length > 0) {
-                // Peek at first byte
                 const b = parseBuffer[0];
 
-                // 1. Check for Sync (AA)
+                // Check for Sync (AA AA)
                 if (b === 0xAA) {
                     if (parseBuffer.length >= 2 && parseBuffer[1] === 0xAA) {
-                        // We have AA AA, try to parse full packet
-                        if (parseBuffer.length < 4) return; // Wait for length
-                        const pLen = parseBuffer[2]; // Payload length
-                        if (parseBuffer.length < 3 + pLen + 1) return; // Wait for full payload + checksum
-
-                        // Extract Payload
+                        if (parseBuffer.length < 4) return; 
+                        const pLen = parseBuffer[2];
+                        if (parseBuffer.length < 3 + pLen + 1) return; 
                         const payload = parseBuffer.slice(3, 3 + pLen);
                         parsePayload(payload);
-                        
-                        // Remove used bytes
                         parseBuffer.splice(0, 3 + pLen + 1);
                         continue;
                     } else {
-                        // Just one AA, wait for next
                         if (parseBuffer.length < 2) return; 
-                        // If next isn't AA, discard first AA
-                        if (parseBuffer[1] !== 0xAA) {
-                             parseBuffer.shift(); 
-                             continue;
-                        }
+                        if (parseBuffer[1] !== 0xAA) { parseBuffer.shift(); continue; }
                     }
                 } 
-                
-                // 2. Check for "Naked" Raw (0x80)
-                // Often looks like: 80 02 High Low
+                // Check for Naked Raw (0x80) - Common in unlocked mode
                 else if (b === 0x80) {
-                    if (parseBuffer.length < 4) return; // Need 80 + len + valH + valL
-                    const len = parseBuffer[1];
-                    if (len === 2) {
+                    if (parseBuffer.length < 4) return;
+                    // Usually 80 02 HH LL
+                    if (parseBuffer[1] === 0x02) {
                         const val = (parseBuffer[2] << 8) | parseBuffer[3];
                         handleRawWave(val);
-                        parseBuffer.splice(0, 4); // Remove these 4 bytes
+                        parseBuffer.splice(0, 4);
                         continue;
                     } else {
-                        // Unknown length for 80, probably noise
-                        parseBuffer.shift();
+                        parseBuffer.shift(); // Invalid 80 packet
                         continue;
                     }
                 }
-
-                // 3. Fallback: Check for eSense/Band codes appearing "naked"
-                // This is risky but sometimes necessary on HM-10 bridges
-                // Example: 02 XX (Signal)
-                else if (b === 0x02 && parseBuffer.length >= 2) { // Signal
-                    updateSignal(parseBuffer[1]);
-                    parseBuffer.splice(0, 2);
-                }
-                else if (b === 0x04 && parseBuffer.length >= 2) { // Attention
-                    updateAttention(parseBuffer[1]);
-                    parseBuffer.splice(0, 2);
-                }
-                else if (b === 0x05 && parseBuffer.length >= 2) { // Meditation
-                    updateMeditation(parseBuffer[1]);
-                    parseBuffer.splice(0, 2);
-                }
-                
-                // Discard unknown byte
                 else {
                     parseBuffer.shift();
                 }
@@ -432,108 +338,66 @@
             let i = 0;
             while (i < payload.length) {
                 const code = payload[i];
-                
-                if (code === 0x80) { // Raw Value inside payload (Rare but possible)
-                    const len = payload[i+1];
+                if (code === 0x80) { // Raw inside payload
                     const val = (payload[i+2] << 8) | payload[i+3];
                     handleRawWave(val);
                     i += 4;
-                }
-                else if (code === 0x02) { // Signal
-                    updateSignal(payload[i+1]);
-                    i += 2;
-                }
-                else if (code === 0x04) { // Attention
-                    updateAttention(payload[i+1]);
-                    i += 2;
-                }
-                else if (code === 0x05) { // Meditation
-                    updateMeditation(payload[i+1]);
-                    i += 2;
-                }
-                else if (code === 0x83) { // ASIC EEG Power (The 8 bands)
-                    // 83 [Length=24] [Delta 3B] ...
-                    // Usually length is 24 (0x18)
-                    i++; // skip code
-                    const len = payload[i];
-                    i++; // skip len
-                    
-                    // Parse 8 bands (3 bytes each)
-                    // Delta, Theta, LowAlpha, HighAlpha, LowBeta, HighBeta, LowGamma, MidGamma
+                } else if (code === 0x02) {
+                    updateSignal(payload[i+1]); i += 2;
+                } else if (code === 0x04) {
+                    updateAttention(payload[i+1]); i += 2;
+                } else if (code === 0x05) {
+                    updateMeditation(payload[i+1]); i += 2;
+                } else if (code === 0x83) { // 8 Bands
+                    i += 2; // skip code + len
                     for (let b = 0; b < 8; b++) {
-                        const val = (payload[i] << 16) | (payload[i+1] << 8) | payload[i+2];
-                        currentBands[b] = val;
+                        currentBands[b] = (payload[i] << 16) | (payload[i+1] << 8) | payload[i+2];
                         i += 3;
                     }
                     updateBandUI();
-                }
-                else {
+                } else {
                     i++;
                 }
             }
         }
 
-        // --- RAW WAVE HANDLER ---
         function handleRawWave(rawVal) {
-            // Convert 16-bit signed to JS number
             if (rawVal > 32768) rawVal -= 65536;
-            
-            // Add to circular buffer
             rawBuffer.shift();
             rawBuffer.push(rawVal);
         }
 
-        // --- UI UPDATERS ---
         function updateSignal(sig) {
-            const sigVal = document.getElementById('sig-val');
-            const sigDesc = document.getElementById('sig-desc');
-            lastSignal = sig;
-            if (sig === 0) {
-                sigVal.innerText = "Good"; sigVal.className = "value sig-good"; sigDesc.innerText = "Signal: 0 (Clean)";
-            } else if (sig === 200) {
-                sigVal.innerText = "Off"; sigVal.className = "value sig-bad"; sigDesc.innerText = "Sensors Off";
-            } else {
-                sigVal.innerText = "Noise"; sigVal.className = "value sig-warn"; sigDesc.innerText = "Signal: " + sig;
-            }
+            const el = document.getElementById('sig-val');
+            if (sig === 0) { el.innerText = "Good"; el.className = "value sig-good"; }
+            else if (sig === 200) { el.innerText = "Off"; el.className = "value sig-bad"; }
+            else { el.innerText = "Noise"; el.className = "value sig-warn"; }
         }
-
-        function updateAttention(att) {
-            document.getElementById('att-val').innerText = att;
+        function updateAttention(att) { 
+            document.getElementById('att-val').innerText = att; 
             document.getElementById('att-bar').style.width = att + "%";
             addDataToGraph(0, att);
         }
-
         function updateMeditation(med) {
-            document.getElementById('med-val').innerText = med;
+            document.getElementById('med-val').innerText = med; 
             document.getElementById('med-bar').style.width = med + "%";
             addDataToGraph(1, med);
         }
-
         function updateBandUI() {
             for(let i=0; i<8; i++) {
                 const el = document.getElementById('band-' + BAND_NAMES[i]);
                 if(el) el.innerText = currentBands[i].toLocaleString();
             }
         }
-
-        const MAX_POINTS = 50;
-        function addDataToGraph(datasetIndex, val) {
-            // Only update graph on Attention (index 0) to avoid double-stepping
-            if (datasetIndex === 0) {
-                const now = new Date().toLocaleTimeString();
-                brainChart.data.labels.push(now);
-                if (brainChart.data.labels.length > MAX_POINTS) brainChart.data.labels.shift();
+        function addDataToGraph(idx, val) {
+            if (idx === 0) {
+                brainChart.data.labels.push(new Date().toLocaleTimeString());
+                if (brainChart.data.labels.length > 50) brainChart.data.labels.shift();
             }
-            
-            brainChart.data.datasets[datasetIndex].data.push(val);
-            if (brainChart.data.datasets[datasetIndex].data.length > MAX_POINTS) {
-                brainChart.data.datasets[datasetIndex].data.shift();
-            }
-            
-            // Throttle updates slightly
+            brainChart.data.datasets[idx].data.push(val);
+            if (brainChart.data.datasets[idx].data.length > 50) brainChart.data.datasets[idx].data.shift();
             brainChart.update();
         }
-
     </script>
 </body>
 </html>
