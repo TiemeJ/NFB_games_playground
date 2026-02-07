@@ -3,603 +3,412 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand Dashboard & Graph</title>
-    
-    <!-- Load Chart.js from CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
+    <title>MyndBand Raw Stream & FFT</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 30px; color: #333; }
+        :root { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --accent: #00f2ea; --raw: #ff0055; }
+        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
         
-        h1 { margin: 0; color: #2d3436; }
-        .subtitle { color: #636e72; font-size: 0.9em; margin-bottom: 20px; }
+        h1 { margin: 0; font-weight: 300; letter-spacing: 2px; }
+        .subtitle { color: #888; font-size: 0.8em; margin-bottom: 20px; }
         
-        /* Status Bar */
-        #status-box { padding: 10px 20px; background: #dfe6e9; border-radius: 30px; font-weight: bold; color: #636e72; margin-bottom: 20px; transition: 0.3s; }
-        .connected { background: #00b894 !important; color: #fff !important; }
+        /* Controls */
+        .controls { display: flex; gap: 15px; margin-bottom: 20px; }
+        button { padding: 12px 30px; font-size: 16px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
+        button:hover { box-shadow: 0 0 15px var(--accent); transform: scale(1.05); }
+        button:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* Dashboard Grid */
+        .dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; width: 100%; max-width: 1000px; }
         
-        /* Button */
-        button { padding: 15px 40px; font-size: 18px; font-weight: bold; background: #0984e3; color: white; border: none; border-radius: 10px; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
-        button:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.2); }
-        button:disabled { background: #b2bec3; transform: none; box-shadow: none; }
+        /* Cards */
+        .card { background: var(--card); padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 1px solid #333; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .card-title { font-size: 0.9em; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+        .stat { font-size: 0.8em; color: var(--accent); }
 
-        /* Grid Layout */
-        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 800px; margin-top: 30px; }
-        .card { background: white; padding: 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); text-align: center; }
-        
-        /* Typography */
-        .label { font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; color: #b2bec3; font-weight: bold; margin-bottom: 10px; }
-        .value { font-size: 4em; font-weight: bold; color: #2d3436; line-height: 1; }
-        
-        /* Colors */
-        .sig-good { color: #00b894; }
-        .sig-bad { color: #d63031; }
-        .sig-warn { color: #fdcb6e; }
+        /* Canvas Containers */
+        .canvas-container { width: 100%; height: 250px; position: relative; background: #000; border-radius: 5px; overflow: hidden; }
+        canvas { display: block; width: 100%; height: 100%; }
 
-        /* Bars */
-        .bar-bg { width: 100%; height: 12px; background: #f1f2f6; border-radius: 6px; margin-top: 15px; overflow: hidden; }
-        .bar-fill { height: 100%; width: 0%; transition: width 0.4s ease-out; }
+        /* Stats Row */
+        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+        .stat-box { background: #252525; padding: 10px; text-align: center; border-radius: 5px; }
+        .stat-label { font-size: 0.7em; color: #888; }
+        .stat-val { font-size: 1.2em; font-weight: bold; color: #fff; }
 
-        /* Graph Container */
-        .graph-container { 
-            background: white; 
-            padding: 20px; 
-            border-radius: 15px; 
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05); 
-            width: 100%; 
-            max-width: 800px; 
-            margin-top: 20px; 
-            height: 350px;
-        }
-
-        /* Section Headers */
-        .section-header {
-            font-size: 1.3em;
-            font-weight: bold;
-            color: #2d3436;
-            margin-top: 40px;
-            margin-bottom: 10px;
-            width: 100%;
-            max-width: 800px;
-            text-align: left;
-        }
-
-        /* EEG Band Cards */
-        .band-dashboard {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr;
-            gap: 12px;
-            width: 100%;
-            max-width: 800px;
-            margin-top: 10px;
-        }
-        .band-card {
-            background: white;
-            padding: 15px 10px;
-            border-radius: 12px;
-            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
-            text-align: center;
-        }
-        .band-label {
-            font-size: 0.7em;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            color: #b2bec3;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
-        .band-hz {
-            font-size: 0.65em;
-            color: #ccc;
-            margin-bottom: 8px;
-        }
-        .band-value {
-            font-size: 1.4em;
-            font-weight: bold;
-            color: #2d3436;
-            line-height: 1;
-        }
-
-        /* Band Graph Container */
-        .band-graph-container {
-            background: white;
-            padding: 15px 20px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-            width: 100%;
-            max-width: 800px;
-            margin-top: 15px;
-            height: 220px;
-        }
-
-        /* Bar chart container */
-        .bar-chart-container {
-            background: white;
-            padding: 20px;
-            border-radius: 15px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
-            width: 100%;
-            max-width: 800px;
-            margin-top: 15px;
-            height: 300px;
-        }
+        /* Status Indicator */
+        #status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #555; margin-right: 8px; }
+        .connected #status-dot { background: #0f0; box-shadow: 0 0 10px #0f0; }
+        .scanning #status-dot { background: #ff0; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
 
-    <h1>🧠 MyndBand Visualizer</h1>
-    <div class="subtitle">Focus & Relaxation Tracker</div>
-    
-    <div id="status-box">Ready</div>
-    <button id="connectBtn">CONNECT</button>
+    <h1><span id="status-dot"></span>NEURO<span style="color:var(--accent)">OSCILLOSCOPE</span></h1>
+    <div class="subtitle">512Hz Raw Data • Real-time FFT Analysis</div>
+
+    <div class="controls">
+        <button id="connectBtn">Connect Headset</button>
+        <button id="freezeBtn" disabled>Freeze Graph</button>
+    </div>
 
     <div class="dashboard">
-        <!-- Signal -->
-        <div class="card" style="grid-column: span 2;">
-            <div class="label">Signal Quality</div>
-            <div class="value sig-bad" id="sig-val">--</div>
-            <div style="font-size: 0.9em; margin-top: 5px; color: #aaa;" id="sig-desc">Connect headset</div>
+        
+        <div class="stats-row">
+            <div class="stat-box">
+                <div class="stat-label">Signal Quality</div>
+                <div class="stat-val" id="val-quality">--</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Attention</div>
+                <div class="stat-val" id="val-att">--</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Meditation</div>
+                <div class="stat-val" id="val-med">--</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Buffer (Sample/sec)</div>
+                <div class="stat-val" id="val-fps">0 Hz</div>
+            </div>
         </div>
 
-        <!-- Attention -->
         <div class="card">
-            <div class="label">Focus</div>
-            <div class="value" id="att-val">0</div>
-            <div class="bar-bg"><div class="bar-fill" id="att-bar" style="background: #e17055;"></div></div>
+            <div class="card-header">
+                <div class="card-title">Raw EEG (512Hz)</div>
+                <div class="stat">Scale: <span id="scale-val">AUTO</span></div>
+            </div>
+            <div class="canvas-container">
+                <canvas id="rawCanvas"></canvas>
+            </div>
         </div>
 
-        <!-- Meditation -->
         <div class="card">
-            <div class="label">Relaxation</div>
-            <div class="value" id="med-val">0</div>
-            <div class="bar-bg"><div class="bar-fill" id="med-bar" style="background: #00cec9;"></div></div>
+            <div class="card-header">
+                <div class="card-title">Live Frequency Spectrum (FFT)</div>
+                <div class="stat">0 - 60 Hz</div>
+            </div>
+            <div class="canvas-container" style="height: 200px;">
+                <canvas id="fftCanvas"></canvas>
+            </div>
+        </div>
+
+        <div class="card" style="font-family: monospace; font-size: 10px; color: #666; height: 100px; overflow-y: scroll;" id="debug-log">
+            > Ready to connect...
         </div>
     </div>
-
-    <!-- eSense GRAPH -->
-    <div class="graph-container">
-        <canvas id="brainChart"></canvas>
-    </div>
-
-    <!-- ══════════ EEG FREQUENCY BANDS SECTION ══════════ -->
-    <div class="section-header">📊 EEG Frequency Bands</div>
-    <div style="color: #636e72; font-size: 0.8em; max-width: 800px; margin-bottom: 5px;">
-        8 bands via MyndBand BLE — split across 0xEB (bands 1–4) and 0xEC (bands 5–8) packets, each [code][3-byte BE value]
-    </div>
-
-    <!-- Live band values (8 bands) -->
-    <div class="band-dashboard">
-        <div class="band-card">
-            <div class="band-label">Delta</div>
-            <div class="band-hz">0.5–2.75 Hz</div>
-            <div class="band-value" id="band-delta">0</div>
-        </div>
-        <div class="band-card">
-            <div class="band-label">Theta</div>
-            <div class="band-hz">3.5–6.75 Hz</div>
-            <div class="band-value" id="band-theta">0</div>
-        </div>
-        <div class="band-card">
-            <div class="band-label">Low α</div>
-            <div class="band-hz">7.5–9.25 Hz</div>
-            <div class="band-value" id="band-lowAlpha">0</div>
-        </div>
-        <div class="band-card">
-            <div class="band-label">High α</div>
-            <div class="band-hz">10–11.75 Hz</div>
-            <div class="band-value" id="band-highAlpha">0</div>
-        </div>
-        <div class="band-card">
-            <div class="band-label">Low β</div>
-            <div class="band-hz">13–16.75 Hz</div>
-            <div class="band-value" id="band-lowBeta">0</div>
-        </div>
-        <div class="band-card">
-            <div class="band-label">High β</div>
-            <div class="band-hz">18–29.75 Hz</div>
-            <div class="band-value" id="band-highBeta">0</div>
-        </div>
-        <div class="band-card">
-            <div class="band-label">Low γ</div>
-            <div class="band-hz">31–39.75 Hz</div>
-            <div class="band-value" id="band-lowGamma">0</div>
-        </div>
-        <div class="band-card">
-            <div class="band-label">Mid γ</div>
-            <div class="band-hz">41–49.75 Hz</div>
-            <div class="band-value" id="band-midGamma">0</div>
-        </div>
-    </div>
-
-    <!-- Live bar chart showing relative power of all 8 bands -->
-    <div class="bar-chart-container">
-        <canvas id="bandBarChart"></canvas>
-    </div>
-
-    <!-- Time-series graph: Delta & Theta -->
-    <div class="band-graph-container">
-        <canvas id="chartDeltaTheta"></canvas>
-    </div>
-
-    <!-- Time-series graph: Alpha (Low + High) -->
-    <div class="band-graph-container">
-        <canvas id="chartAlpha"></canvas>
-    </div>
-
-    <!-- Time-series graph: Beta (Low + High) -->
-    <div class="band-graph-container">
-        <canvas id="chartBeta"></canvas>
-    </div>
-
-    <!-- Time-series graph: Gamma (Low + Mid) -->
-    <div class="band-graph-container">
-        <canvas id="chartGamma"></canvas>
-    </div>
-
-    <!-- Debug Panel -->
-    <div class="section-header">🔍 Debug Log <button onclick="document.getElementById('debug-log').innerText=''" style="font-size:12px;padding:4px 12px;margin-left:10px;">Clear</button></div>
-    <pre id="debug-log" style="background:#1e1e1e; color:#0f0; padding:15px; border-radius:10px; width:100%; max-width:800px; height:200px; overflow-y:auto; font-size:11px; font-family:monospace; white-space:pre-wrap; word-break:break-all;">Waiting for data...</pre>
 
     <script>
-        // --- CONFIGURATION ---
+        // ════════════════════ CONFIGURATION ════════════════════
+        // MyndBand / NeuroSky Service UUIDs
         const SERVICE_UUID = "039afff0-2c94-11e3-9e06-0002a5d5c51b"; 
-        const DATA_CHAR_UUID = "039afff8-2c94-11e3-9e06-0002a5d5c51b";
+        const DATA_CHAR_UUID = "039afff8-2c94-11e3-9e06-0002a5d5c51b"; // Receive
+        const CMD_CHAR_UUID = "039afff9-2c94-11e3-9e06-0002a5d5c51b";  // Send (often used to enable raw)
 
-        const btn = document.getElementById('connectBtn');
-        const statusBox = document.getElementById('status-box');
+        // ════════════════════ STATE ════════════════════
+        let device, server, service, notifyChar, cmdChar;
+        let isFreezed = false;
+        let sampleRateCounter = 0;
+        let lastSampleTime = Date.now();
+        
+        // Data Buffers
+        const RAW_BUFFER_SIZE = 512 * 2; // 2 seconds of data
+        let rawBuffer = new Array(RAW_BUFFER_SIZE).fill(0);
+        let fftData = new Array(64).fill(0); // 0-60Hz bins
 
-        // --- 8-BAND DEFINITIONS ---
-        // MyndBand sub-codes: 0x06–0x0D map to the 8 standard NeuroSky bands
-        const BAND_NAMES  = ['delta','theta','lowAlpha','highAlpha','lowBeta','highBeta','lowGamma','midGamma'];
-        const BAND_LABELS = ['Delta','Theta','Low α','High α','Low β','High β','Low γ','Mid γ'];
-        const BAND_COLORS = [
-            '#6c5ce7', // delta  — purple
-            '#0984e3', // theta  — blue
-            '#00b894', // lowα   — green
-            '#00cec9', // highα  — teal
-            '#fdcb6e', // lowβ   — yellow
-            '#e17055', // highβ  — orange
-            '#d63031', // lowγ   — red
-            '#e84393', // midγ   — pink
-        ];
+        // Parser State
+        let parseStage = 0; // 0=Sync1, 1=Sync2, 2=PayloadLen, 3=Payload, 4=ChkSum
+        let payloadLen = 0;
+        let payloadBytes = [];
+        let chkSum = 0;
 
-        // Map from MyndBand sub-code to band index
-        const CODE_TO_BAND = {
-            0x06: 0, // Delta
-            0x07: 1, // Theta
-            0x08: 2, // Low Alpha
-            0x09: 3, // High Alpha
-            0x0A: 4, // Low Beta
-            0x0B: 5, // High Beta
-            0x0C: 6, // Low Gamma
-            0x0D: 7, // Mid Gamma
-        };
+        // ════════════════════ UI ELEMENTS ════════════════════
+        const rawCanvas = document.getElementById('rawCanvas');
+        const fftCanvas = document.getElementById('fftCanvas');
+        const ctxRaw = rawCanvas.getContext('2d');
+        const ctxFft = fftCanvas.getContext('2d');
+        const debugEl = document.getElementById('debug-log');
+        
+        // Resize Canvas
+        function resize() {
+            rawCanvas.width = rawCanvas.parentElement.clientWidth;
+            rawCanvas.height = rawCanvas.parentElement.clientHeight;
+            fftCanvas.width = fftCanvas.parentElement.clientWidth;
+            fftCanvas.height = fftCanvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
 
-        // --- eSense CHART (Focus & Relaxation) ---
-        const brainChart = new Chart(document.getElementById('brainChart').getContext('2d'), {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    {
-                        label: 'Focus',
-                        borderColor: '#e17055',
-                        backgroundColor: 'rgba(225, 112, 85, 0.1)',
-                        data: [],
-                        tension: 0.3,
-                        borderWidth: 3,
-                        pointRadius: 0
-                    },
-                    {
-                        label: 'Relaxation',
-                        borderColor: '#00cec9',
-                        backgroundColor: 'rgba(0, 206, 201, 0.1)',
-                        data: [],
-                        tension: 0.3,
-                        borderWidth: 3,
-                        pointRadius: 0
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 0 },
-                scales: {
-                    y: { beginAtZero: true, max: 100, grid: { color: '#f0f0f0' } },
-                    x: { display: false, grid: { display: false } }
-                },
-                plugins: { legend: { position: 'top' } }
-            }
-        });
-
-        // --- BAND BAR CHART (snapshot of all 8 bands) ---
-        const bandBarChart = new Chart(document.getElementById('bandBarChart').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: BAND_LABELS,
-                datasets: [{
-                    label: 'Relative Power',
-                    data: [0,0,0,0,0,0,0,0],
-                    backgroundColor: BAND_COLORS.map(c => c + 'CC'),
-                    borderColor: BAND_COLORS,
-                    borderWidth: 2,
-                    borderRadius: 6,
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 200 },
-                scales: {
-                    y: { beginAtZero: true, title: { display: true, text: 'Relative Power' }, grid: { color: '#f0f0f0' } },
-                    x: { grid: { display: false } }
-                },
-                plugins: { legend: { display: false } }
-            }
-        });
-
-        // --- HELPER: create a time-series line chart for a pair of bands ---
-        function createBandLineChart(canvasId, title, indices) {
-            const datasets = indices.map(i => ({
-                label: BAND_LABELS[i],
-                borderColor: BAND_COLORS[i],
-                backgroundColor: BAND_COLORS[i] + '18',
-                data: [],
-                tension: 0.3,
-                borderWidth: 2,
-                pointRadius: 0,
-                fill: true,
-            }));
-            return new Chart(document.getElementById(canvasId).getContext('2d'), {
-                type: 'line',
-                data: { labels: [], datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: { duration: 0 },
-                    scales: {
-                        y: { beginAtZero: true, grid: { color: '#f0f0f0' }, title: { display: true, text: title } },
-                        x: { display: false, grid: { display: false } }
-                    },
-                    plugins: { legend: { position: 'top' } }
-                }
-            });
+        function log(msg) {
+            debugEl.innerHTML += `<div>> ${msg}</div>`;
+            debugEl.scrollTop = debugEl.scrollHeight;
         }
 
-        // 4 grouped time-series charts
-        const chartDeltaTheta = createBandLineChart('chartDeltaTheta', 'Delta & Theta', [0, 1]);
-        const chartAlpha      = createBandLineChart('chartAlpha',      'Alpha (Low & High)', [2, 3]);
-        const chartBeta       = createBandLineChart('chartBeta',       'Beta (Low & High)', [4, 5]);
-        const chartGamma      = createBandLineChart('chartGamma',      'Gamma (Low & Mid)', [6, 7]);
-        const bandCharts = [
-            { chart: chartDeltaTheta, indices: [0, 1] },
-            { chart: chartAlpha,      indices: [2, 3] },
-            { chart: chartBeta,       indices: [4, 5] },
-            { chart: chartGamma,      indices: [6, 7] },
-        ];
-
-        const MAX_POINTS = 60;
-
-        // --- BLUETOOTH CONNECTION ---
-        btn.addEventListener('click', async () => {
+        // ════════════════════ BLUETOOTH CONNECTION ════════════════════
+        document.getElementById('connectBtn').addEventListener('click', async () => {
             try {
-                statusBox.innerText = "Scanning...";
-                const device = await navigator.bluetooth.requestDevice({
+                log("Scanning for MyndBand/NeuroSky...");
+                document.body.classList.add("scanning");
+                
+                device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
                     optionalServices: [SERVICE_UUID]
                 });
 
-                statusBox.innerText = "Connecting...";
-                const server = await device.gatt.connect();
-                const service = await server.getPrimaryService(SERVICE_UUID);
-                
-                statusBox.innerText = "Getting Data Channel...";
-                let notifyChar = null;
+                log("Connecting to GATT Server...");
+                server = await device.gatt.connect();
+                service = await server.getPrimaryService(SERVICE_UUID);
+
+                // Try to get Notify Char
                 try {
                     notifyChar = await service.getCharacteristic(DATA_CHAR_UUID);
                 } catch(e) {
+                    // Fallback search
                     const chars = await service.getCharacteristics();
-                    notifyChar = chars.find(c => c.uuid.includes("fff8") && c.properties.notify);
+                    notifyChar = chars.find(c => c.properties.notify);
                 }
-                if (!notifyChar) throw new Error("Could not find Data Channel (fff8)");
+
+                if (!notifyChar) throw "No Notify Characteristic found";
 
                 await notifyChar.startNotifications();
                 notifyChar.addEventListener('characteristicvaluechanged', handleData);
                 
-                statusBox.innerText = "Connected & Streaming";
-                statusBox.className = "connected";
-                btn.innerText = "Connected";
-                btn.disabled = true;
+                // Attempt to send "Enable Raw" command (Command 0x02 or 0x00 often wakes the stream)
+                // Some chips default to 9600 baud (no raw). We try to switch modes if possible.
+                // Note: The MyndBand usually streams raw by default if the connection is fast enough.
+                
+                document.body.classList.remove("scanning");
+                document.body.classList.add("connected");
+                document.getElementById('connectBtn').disabled = true;
+                document.getElementById('connectBtn').innerText = "Streaming";
+                document.getElementById('freezeBtn').disabled = false;
+                log("Connected! Waiting for 0x80 packets...");
+                
+                // Start Animation Loop
+                requestAnimationFrame(drawLoop);
+                
+                // Start FPS counter
+                setInterval(() => {
+                    document.getElementById('val-fps').innerText = sampleRateCounter + " Hz";
+                    sampleRateCounter = 0;
+                }, 1000);
 
             } catch (e) {
-                statusBox.innerText = "Error: " + e.message;
+                log("Error: " + e);
+                document.body.classList.remove("scanning");
             }
         });
 
-        // ══════════════════════════════════════════════════════════
-        // MyndBand BLE PARSER
-        //
-        // Each BLE notification is 20 bytes:
-        //   Bytes [0–1]: 00 00 (header)
-        //   Byte  [2]:   Packet type (0xEA, 0xEB, 0xEC)
-        //   Byte  [3]:   00 (separator)
-        //   Bytes [4–19]: Data payload
-        //
-        // Packet types:
-        //   0xEB — EEG bands 1–4: [code 1B][value 3B] × 4
-        //          Codes: 06=Delta, 07=Theta, 08=LowAlpha, 09=HighAlpha
-        //
-        //   0xEC — EEG bands 5–8: [code 1B][value 3B] × 4
-        //          Codes: 0A=LowBeta, 0B=HighBeta, 0C=LowGamma, 0D=MidGamma
-        //
-        //   0xEA — eSense:
-        //          [...] 02 [sig] 04 [att] 05 [med] [padding...]
-        //
-        // Values are 3-byte big-endian unsigned integers (0–16,777,215).
-        // A complete frame = EB + EC + EA (~1 per second).
-        // ══════════════════════════════════════════════════════════
+        document.getElementById('freezeBtn').addEventListener('click', () => {
+            isFreezed = !isFreezed;
+            document.getElementById('freezeBtn').innerText = isFreezed ? "Resume" : "Freeze Graph";
+        });
 
-        // Accumulate band values across EB and EC packets
-        let currentBands = [0, 0, 0, 0, 0, 0, 0, 0];
-        let gotEB = false, gotEC = false;
-
-        // eSense state
-        let lastSignal = 200, lastAttention = 0, lastMeditation = 0;
-
-        // Debug
-        let debugLines = [];
-        const MAX_DEBUG = 25;
-        function addDebug(msg) {
-            debugLines.push(msg);
-            if (debugLines.length > MAX_DEBUG) debugLines.shift();
-            const el = document.getElementById('debug-log');
-            if (el) el.innerText = debugLines.join('\n');
-        }
-
+        // ════════════════════ DATA PARSER (The Core) ════════════════════
+        // The ThinkGear protocol sends packets: [AA] [AA] [Len] [Payload...] [Checksum]
+        // Inside Payload, we look for [0x80] [High] [Low] (Raw Wave)
+        
         function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
-            const len = data.length;
+            
+            for (let i = 0; i < data.length; i++) {
+                const byte = data[i];
 
-            if (len < 4) {
-                addDebug(`📥 [${len}B] too short, skipped`);
-                return;
-            }
+                switch (parseStage) {
+                    case 0: // Sync 1
+                        if (byte === 0xAA) parseStage = 1;
+                        break;
+                    case 1: // Sync 2
+                        if (byte === 0xAA) parseStage = 2;
+                        else parseStage = 0;
+                        break;
+                    case 2: // Length
+                        if (byte > 169) { // Max payload size violation
+                            parseStage = 0;
+                        } else {
+                            payloadLen = byte;
+                            payloadBytes = [];
+                            chkSum = 0;
+                            parseStage = 3;
+                        }
+                        break;
+                    case 3: // Payload Accumulation
+                        payloadBytes.push(byte);
+                        chkSum += byte;
+                        if (payloadBytes.length >= payloadLen) {
+                            parseStage = 4;
+                        }
+                        break;
+                    case 4: // Checksum verify
+                        chkSum &= 0xFF;
+                        chkSum = (~chkSum) & 0xFF;
 
-            const packetType = data[2];
-
-            // ──── 0xEB: EEG bands 1–4 (Delta, Theta, LowAlpha, HighAlpha) ────
-            if (packetType === 0xEB) {
-                parseBandEntries(data, 4);
-                gotEB = true;
-                addDebug(`📥 EB  Δ=${currentBands[0]}  θ=${currentBands[1]}  lα=${currentBands[2]}  hα=${currentBands[3]}`);
-                updateBandUI(currentBands);
-            }
-
-            // ──── 0xEC: EEG bands 5–8 (LowBeta, HighBeta, LowGamma, MidGamma) ────
-            else if (packetType === 0xEC) {
-                parseBandEntries(data, 4);
-                gotEC = true;
-                addDebug(`📥 EC  lβ=${currentBands[4]}  hβ=${currentBands[5]}  lγ=${currentBands[6]}  mγ=${currentBands[7]}`);
-                updateBandUI(currentBands);
-            }
-
-            // ──── 0xEA: eSense (signal, attention, meditation) ────
-            else if (packetType === 0xEA) {
-                let signal = null, attention = null, meditation = null;
-                // Scan payload for single-byte eSense codes
-                for (let i = 4; i < len - 1; i++) {
-                    if (data[i] === 0x02) { signal = data[i+1]; }
-                    else if (data[i] === 0x04) { attention = data[i+1]; }
-                    else if (data[i] === 0x05) { meditation = data[i+1]; }
-                }
-
-                const sig = signal ?? lastSignal;
-                const att = attention ?? lastAttention;
-                const med = meditation ?? lastMeditation;
-
-                addDebug(`📥 EA  sig=${sig}  att=${att}  med=${med}`);
-
-                if (signal !== null) lastSignal = signal;
-                if (attention !== null) lastAttention = attention;
-                if (meditation !== null) lastMeditation = meditation;
-
-                updateUI(sig, att, med);
-                updateGraph(att, med);
-
-                // EA completes a frame → push band time-series
-                if (gotEB || gotEC) {
-                    updateBandCharts(currentBands);
-                    gotEB = false;
-                    gotEC = false;
+                        if (byte === chkSum) {
+                            parsePacket(payloadBytes); // SUCCESS!
+                        } else {
+                            // log("Checksum fail");
+                        }
+                        parseStage = 0;
+                        break;
                 }
             }
-
-            // ──── Unknown ────
-            else {
-                const hex = Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' ');
-                addDebug(`📥 ?? type=0x${packetType.toString(16)} ${hex}`);
-            }
         }
 
-        // Parse [code 1B][value 3B] entries starting at offset
-        function parseBandEntries(data, offset) {
-            let i = offset;
-            while (i + 3 < data.length) {
-                const code = data[i];
-                const val  = (data[i+1] << 16) | (data[i+2] << 8) | data[i+3];
+        function parsePacket(bytes) {
+            let i = 0;
+            while (i < bytes.length) {
+                const code = bytes[i];
+                
+                // 0x80 = RAW WAVE (2 bytes)
+                if (code === 0x80) {
+                    const len = bytes[i+1]; // Usually 2
+                    const high = bytes[i+2];
+                    const low = bytes[i+3];
+                    
+                    // Convert 16-bit big-endian signed to integer
+                    let raw = (high << 8) | low;
+                    if (raw >= 32768) raw -= 65536;
 
-                if (code in CODE_TO_BAND) {
-                    currentBands[CODE_TO_BAND[code]] = val;
+                    // Push to Buffer
+                    if (!isFreezed) {
+                        rawBuffer.push(raw);
+                        rawBuffer.shift();
+                        sampleRateCounter++;
+                    }
+                    
+                    i += 4; // Code + Len + High + Low
+                } 
+                // 0x02 = Signal Quality (1 byte)
+                else if (code === 0x02) {
+                    const val = bytes[i+1];
+                    document.getElementById('val-quality').innerText = val === 0 ? "Good" : (val === 200 ? "Off" : "Poor");
+                    document.getElementById('val-quality').style.color = val === 0 ? "#0f0" : "#f00";
+                    i += 2;
                 }
-                i += 4; // 1 byte code + 3 bytes value
-            }
-        }
-
-        // --- eSense UI ---
-        function updateUI(sig, att, med) {
-            const sigVal = document.getElementById('sig-val');
-            const sigDesc = document.getElementById('sig-desc');
-
-            if (sig === 0) {
-                sigVal.innerText = "Good";
-                sigVal.className = "value sig-good";
-                sigDesc.innerText = "Clean Signal (0)";
-            } else if (sig === 200) {
-                sigVal.innerText = "Sensors Off";
-                sigVal.className = "value sig-bad";
-                sigDesc.innerText = "Check skin contact";
-            } else {
-                sigVal.innerText = "Noise";
-                sigVal.className = "value sig-warn";
-                sigDesc.innerText = `Interference: ${sig}`;
-            }
-
-            document.getElementById('att-val').innerText = att;
-            document.getElementById('att-bar').style.width = att + "%";
-            document.getElementById('med-val').innerText = med;
-            document.getElementById('med-bar').style.width = med + "%";
-        }
-
-        function updateGraph(att, med) {
-            const timestamp = new Date().toLocaleTimeString();
-            brainChart.data.labels.push(timestamp);
-            brainChart.data.datasets[0].data.push(att);
-            brainChart.data.datasets[1].data.push(med);
-
-            if (brainChart.data.labels.length > MAX_POINTS) {
-                brainChart.data.labels.shift();
-                brainChart.data.datasets.forEach(ds => ds.data.shift());
-            }
-            brainChart.update();
-        }
-
-        // --- EEG Band UI ---
-        function updateBandUI(powers) {
-            for (let i = 0; i < 8; i++) {
-                const el = document.getElementById('band-' + BAND_NAMES[i]);
-                if (el) el.innerText = powers[i].toLocaleString();
-            }
-            bandBarChart.data.datasets[0].data = [...powers];
-            bandBarChart.update();
-        }
-
-        function updateBandCharts(powers) {
-            const timestamp = new Date().toLocaleTimeString();
-
-            for (const { chart, indices } of bandCharts) {
-                chart.data.labels.push(timestamp);
-                indices.forEach((bandIdx, dsIdx) => {
-                    chart.data.datasets[dsIdx].data.push(powers[bandIdx]);
-                });
-
-                if (chart.data.labels.length > MAX_POINTS) {
-                    chart.data.labels.shift();
-                    chart.data.datasets.forEach(ds => ds.data.shift());
+                // 0x04 = Attention (1 byte)
+                else if (code === 0x04) {
+                    document.getElementById('val-att').innerText = bytes[i+1];
+                    i += 2;
                 }
-                chart.update();
+                // 0x05 = Meditation (1 byte)
+                else if (code === 0x05) {
+                    document.getElementById('val-med').innerText = bytes[i+1];
+                    i += 2;
+                }
+                // Skip unknown codes (Usually multi-byte structure)
+                else {
+                    // Simple heuristic: Most other ThinkGear codes are [Code] [Value]
+                    // If we get lost, the next packet sync (AA AA) will reset us.
+                    i++;
+                }
             }
         }
+
+        // ════════════════════ VISUALIZATION & FFT ════════════════════
+        
+        function drawLoop() {
+            if (!isFreezed) {
+                drawOscilloscope();
+                if (sampleRateCounter > 10) computeFFT(); // Only compute if data is flowing
+            }
+            requestAnimationFrame(drawLoop);
+        }
+
+        function drawOscilloscope() {
+            const w = rawCanvas.width;
+            const h = rawCanvas.height;
+            const mid = h / 2;
+            
+            ctxRaw.clearRect(0, 0, w, h);
+            
+            // Grid lines
+            ctxRaw.strokeStyle = "#333";
+            ctxRaw.lineWidth = 1;
+            ctxRaw.beginPath();
+            ctxRaw.moveTo(0, mid); ctxRaw.lineTo(w, mid);
+            ctxRaw.stroke();
+
+            // Waveform
+            ctxRaw.strokeStyle = "#ff0055";
+            ctxRaw.lineWidth = 2;
+            ctxRaw.beginPath();
+            
+            // Draw last 512 points (1 second)
+            // Scaling: Raw values are usually +/- 200 to 2000. 
+            // We map +/- 1000 to full height.
+            const slice = rawBuffer.slice(RAW_BUFFER_SIZE - 512); 
+            const step = w / slice.length;
+            
+            for (let i = 0; i < slice.length; i++) {
+                const x = i * step;
+                // Scale factor: 0.2 puts typical EEG in readable range
+                const y = mid - (slice[i] * 0.15); 
+                if (i === 0) ctxRaw.moveTo(x, y);
+                else ctxRaw.lineTo(x, y);
+            }
+            ctxRaw.stroke();
+        }
+
+        // Simple JS FFT Implementation (Cooley-Tukey not needed for display purposes, simple DFT is fine for low bin count)
+        // Note: For 512Hz sample rate, Nyquist is 256Hz. We care about 1-60Hz.
+        function computeFFT() {
+            // Take recent samples (power of 2)
+            const samples = rawBuffer.slice(RAW_BUFFER_SIZE - 256);
+            const N = samples.length;
+            
+            // We only calculate first 60 bins (approx 0-60Hz)
+            // To do this fast without a heavy library, we do a basic correlation for frequencies of interest.
+            
+            let spectrum = [];
+            // Resolution: 512Hz / 256 samples = 2Hz per bin.
+            // We want up to 60Hz -> 30 bins.
+            
+            for (let k = 1; k < 40; k++) { // k is frequency index
+                let real = 0;
+                let imag = 0;
+                for (let n = 0; n < N; n++) {
+                    const angle = (2 * Math.PI * k * n) / N;
+                    real += samples[n] * Math.cos(angle);
+                    imag -= samples[n] * Math.sin(angle);
+                }
+                const magnitude = Math.sqrt(real * real + imag * imag);
+                spectrum.push(magnitude);
+            }
+            
+            drawFFT(spectrum);
+        }
+
+        function drawFFT(data) {
+            const w = fftCanvas.width;
+            const h = fftCanvas.height;
+            
+            ctxFft.clearRect(0, 0, w, h);
+            
+            const barWidth = (w / data.length) - 2;
+            const maxVal = 50000; // Arbitrary clamp for visual scaling
+
+            for (let i = 0; i < data.length; i++) {
+                let mag = data[i];
+                // Logarithmic scaling for better visibility
+                let hBar = (mag / maxVal) * h * 5; 
+                if (hBar > h) hBar = h;
+
+                // Color based on Frequency Band
+                // 0-4 (Delta), 4-8 (Theta), 8-12 (Alpha), 12-30 (Beta), 30+ (Gamma)
+                const hz = i * 2; // Each bin is ~2Hz
+                let color = "#fff";
+                if (hz < 4) color = "#6c5ce7"; // Delta
+                else if (hz < 8) color = "#0984e3"; // Theta
+                else if (hz < 13) color = "#00b894"; // Alpha
+                else if (hz < 30) color = "#fdcb6e"; // Beta
+                else color = "#d63031"; // Gamma
+
+                ctxFft.fillStyle = color;
+                ctxFft.fillRect(i * (barWidth + 2), h - hBar, barWidth, hBar);
+            }
+        }
+
     </script>
 </body>
 </html>
