@@ -3,176 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V8: Targeted Unlock</title>
+    <title>NeuroScope V9: Exact Replay</title>
     <style>
-        :root { --bg: #0d0d0d; --panel: #1a1a1a; --text: #e0e0e0; --accent: #00ff9d; --err: #ff4d4d; }
-        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        :root { --bg: #121212; --panel: #1e1e1e; --accent: #00e5ff; --text: #eee; }
+        body { font-family: 'Consolas', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        h1 { margin: 0; color: #fff; border-bottom: 2px solid var(--accent); padding-bottom: 10px; letter-spacing: 2px; }
-        .subtitle { margin-top: 10px; color: #888; font-size: 0.9em; margin-bottom: 30px; }
-        
-        button { padding: 15px 40px; font-size: 16px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
-        button:hover { box-shadow: 0 0 20px rgba(0, 255, 157, 0.4); transform: scale(1.05); }
-        button:disabled { background: #333; color: #555; cursor: not-allowed; transform: none; box-shadow: none; }
+        h1 { border-bottom: 2px solid var(--accent); padding-bottom: 10px; color: #fff; }
+        button { background: var(--accent); color: #000; font-size: 16px; padding: 15px 30px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 20px; }
+        button:disabled { background: #444; color: #888; cursor: default; }
 
-        .dashboard { width: 100%; max-width: 900px; display: grid; gap: 20px; }
-        
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 900px; }
+        .card { background: var(--panel); padding: 15px; border: 1px solid #333; }
+
         /* Stats */
-        .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
-        .stat-card { background: var(--panel); padding: 15px; border-radius: 8px; border: 1px solid #333; text-align: center; }
-        .stat-val { font-size: 2em; font-weight: bold; color: #fff; margin-bottom: 5px; }
-        .stat-lbl { font-size: 0.75em; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+        .stat-val { font-size: 2em; font-weight: bold; color: #fff; }
+        .stat-lbl { color: var(--accent); font-size: 0.8em; text-transform: uppercase; }
+
+        /* Hex Dump */
+        #hex-dump { 
+            height: 150px; 
+            font-size: 11px; 
+            color: #0f0; 
+            background: #000; 
+            padding: 10px; 
+            overflow-y: auto; 
+            word-break: break-all; 
+            border: 1px solid #333; 
+            font-family: 'Courier New', monospace;
+        }
 
         /* Canvas */
-        .scope-container { height: 350px; background: #000; border: 1px solid #333; border-radius: 8px; position: relative; overflow: hidden; }
+        .scope-wrap { height: 300px; background: #000; border: 1px solid #333; position: relative; margin-top: 20px; }
         canvas { width: 100%; height: 100%; display: block; }
 
         /* Log */
-        #log { height: 150px; background: #050505; border: 1px solid #333; padding: 15px; overflow-y: auto; font-size: 11px; white-space: pre-wrap; font-family: 'Courier New', monospace; color: #888; border-radius: 8px; }
-        .l-ok { color: var(--accent); }
-        .l-err { color: var(--err); }
-        .l-warn { color: #ffbb00; }
+        #sys-log { margin-top: 10px; color: #666; font-size: 0.9em; max-width: 900px; width: 100%; }
     </style>
 </head>
 <body>
 
-    <h1>NEUROSCOPE V8</h1>
-    <div class="subtitle">Target: Service FFE0 (Serial) • Command 0x02</div>
+    <h1>NEUROSCOPE V9</h1>
+    <div style="margin-bottom: 20px; color: #888;">Protocol: Explicit Write Request (With Response)</div>
 
-    <button id="btnConnect">EXECUTE UNLOCK SEQUENCE</button>
+    <button id="btn">CONNECT & REPLAY ANDROID LOG</button>
 
-    <div class="dashboard">
-        <div class="stats-row">
-            <div class="stat-card">
-                <div class="stat-val" id="val-pps">0</div>
-                <div class="stat-lbl">Packets / Sec</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-val" id="val-sig">--</div>
-                <div class="stat-lbl">Signal Quality</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-val"><span id="val-att">--</span> / <span id="val-med">--</span></div>
-                <div class="stat-lbl">Att / Med</div>
-            </div>
+    <div class="grid">
+        <div class="card">
+            <div class="stat-val" id="pps">0</div>
+            <div class="stat-lbl">Packets Per Second</div>
         </div>
-
-        <div class="scope-container">
-            <canvas id="scope"></canvas>
+        
+        <div class="card">
+            <div style="margin-bottom: 5px; color: #aaa; font-size: 0.8em;">INCOMING RAW HEX (FIRST 1000 BYTES)</div>
+            <div id="hex-dump">Waiting for stream...</div>
         </div>
-
-        <div id="log">Ready. Click button to connect...</div>
     </div>
 
+    <div class="scope-wrap" style="width: 100%; max-width: 900px;">
+        <canvas id="graph"></canvas>
+    </div>
+
+    <div id="sys-log">System Ready.</div>
+
     <script>
-        // ════ CONFIGURATION (FROM LOG ANALYSIS) ════
-        const UUIDS = {
-            // The "Back Door" Service found in the log
-            SERIAL_SERVICE: "0000ffe0-0000-1000-8000-00805f9b34fb",
-            SERIAL_CHAR:    "0000ffe1-0000-1000-8000-00805f9b34fb",
-            // The "Front Door" Service (Data might arrive here after unlocking)
-            MYND_SERVICE:   "039afff0-2c94-11e3-9e06-0002a5d5c51b" 
-        };
+        // ════ CONFIG ════
+        // The exact UUIDs from your log analysis
+        const SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
+        const CHAR_UUID    = "0000ffe1-0000-1000-8000-00805f9b34fb";
+        
+        // Also listen to standard just in case
+        const MYND_UUID    = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
 
         // ════ STATE ════
-        let device, server;
         let rawBuffer = new Array(512).fill(0);
         let packetCount = 0;
+        let byteLogCount = 0;
 
-        // ════ UI HANDLERS ════
-        const btn = document.getElementById('btnConnect');
-        const logEl = document.getElementById('log');
-        const cvs = document.getElementById('scope');
+        // ════ UI ════
+        const btn = document.getElementById('btn');
+        const hexEl = document.getElementById('hex-dump');
+        const ppsEl = document.getElementById('pps');
+        const logEl = document.getElementById('sys-log');
+        const cvs = document.getElementById('graph');
         const ctx = cvs.getContext('2d');
 
-        function log(msg, cls='') {
-            const d = document.createElement('div');
-            d.innerText = `> ${msg}`;
-            if(cls) d.classList.add(cls);
-            logEl.appendChild(d);
-            logEl.scrollTop = logEl.scrollHeight;
-        }
-
-        function resize() {
-            cvs.width = cvs.parentElement.clientWidth;
-            cvs.height = cvs.parentElement.clientHeight;
-        }
+        function log(msg) { logEl.innerText = "> " + msg; }
+        function resize() { cvs.width = cvs.parentElement.clientWidth; cvs.height = cvs.parentElement.clientHeight; }
         window.addEventListener('resize', resize);
         resize();
 
-        // ════ MAIN LOGIC ════
+        // ════ MAIN ════
         btn.addEventListener('click', async () => {
             try {
-                // 1. SCAN
-                log("Scanning for MyndBand (Dual Service)...", 'l-warn');
-                device = await navigator.bluetooth.requestDevice({
+                log("Scanning...");
+                const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    // IMPORTANT: Request access to BOTH services
-                    optionalServices: [UUIDS.SERIAL_SERVICE, UUIDS.MYND_SERVICE]
+                    optionalServices: [SERVICE_UUID, MYND_UUID]
                 });
 
-                log(`Connecting to ${device.name}...`);
-                server = await device.gatt.connect();
-                log("Connected.", 'l-ok');
-
-                // 2. SEARCH FOR HIDDEN SERIAL SERVICE (FFE0)
-                log("Hunting for Serial Service (FFE0)...");
-                let serialService = null;
-                try {
-                    serialService = await server.getPrimaryService(UUIDS.SERIAL_SERVICE);
-                    log("FOUND SERIAL SERVICE! (The Hidden Door)", 'l-ok');
-                } catch(e) {
-                    log("Could not find Serial Service. This is unexpected given the logs.", 'l-err');
-                }
-
-                // 3. LISTEN TO EVERYTHING (Data might come on FFF4 or FFE1)
-                const services = await server.getPrimaryServices();
-                for (const s of services) {
-                    const chars = await s.getCharacteristics();
-                    for (const c of chars) {
-                        if (c.properties.notify) {
-                            await c.startNotifications();
-                            c.addEventListener('characteristicvaluechanged', handleData);
-                            log(`Listening on ...${c.uuid.substring(4,8)}`, 'l-ok');
-                        }
-                    }
-                }
-
-                // 4. SEND THE MAGIC UNLOCK COMMAND (0x02 to FFE1)
-                if (serialService) {
-                    try {
-                        const writeChar = await serialService.getCharacteristic(UUIDS.SERIAL_CHAR);
-                        const cmd = new Uint8Array([0x02]);
-                        
-                        log(">>> SENDING UNLOCK CODE (0x02) to FFE1 <<<", 'l-warn');
-                        
-                        // Try "Write Without Response" first (faster, often required for cmd)
-                        if (writeChar.properties.writeWithoutResponse) {
-                            await writeChar.writeValueWithoutResponse(cmd);
-                        } else {
-                            await writeChar.writeValue(cmd);
-                        }
-                        log("Command Sent Successfully.", 'l-ok');
-                    } catch(e) {
-                        log("Write Failed: " + e.message, 'l-err');
-                    }
-                } else {
-                    log("Skipping Unlock (No Serial Service found). Data likely won't start.", 'l-err');
-                }
-
-                // UI Cleanup
-                btn.disabled = true;
-                btn.innerText = "STREAMING ACTIVE";
+                log("Connecting...");
+                const server = await device.gatt.connect();
                 
-                // Start Loops
+                // 1. GET SERIAL SERVICE
+                log("Getting Serial Service (FFE0)...");
+                const service = await server.getPrimaryService(SERVICE_UUID);
+                const char = await service.getCharacteristic(CHAR_UUID);
+                log("Found Serial Characteristic (FFE1).");
+
+                // 2. START NOTIFICATIONS FIRST (Like Android)
+                await char.startNotifications();
+                char.addEventListener('characteristicvaluechanged', handleData);
+                log("Listening started.");
+
+                // 3. SEND COMMAND (Strict Mode)
+                log("Sending 0x02 (Write With Response)...");
+                const cmd = new Uint8Array([0x02]);
+                
+                // IMPORTANT: We use writeValue (With Response) because the log showed a 'Write Request'
+                await char.writeValue(cmd);
+                
+                log("Command Sent! Waiting for flood...");
+                btn.disabled = true;
+                btn.innerText = "RUNNING";
+
+                // Loops
                 requestAnimationFrame(draw);
                 setInterval(() => {
-                    document.getElementById('val-pps').innerText = packetCount;
+                    ppsEl.innerText = packetCount;
                     packetCount = 0;
                 }, 1000);
 
-            } catch(e) {
-                log("ERROR: " + e.message, 'l-err');
+            } catch (e) {
+                log("ERROR: " + e.message);
+                hexEl.innerText += "\nERROR: " + e.message;
             }
         });
 
@@ -183,10 +146,16 @@
             const data = new Uint8Array(event.target.value.buffer);
             packetCount++;
 
-            // Push bytes to buffer
+            // 1. HEX SPY (Debug)
+            if (byteLogCount < 500) { // Only log first 500 bytes to save CPU
+                let s = "";
+                for(let b of data) s += b.toString(16).padStart(2,'0').toUpperCase() + " ";
+                hexEl.innerText += s;
+                byteLogCount += data.length;
+            }
+
+            // 2. BUFFER
             for (let i=0; i<data.length; i++) buffer.push(data[i]);
-            
-            // Limit buffer size
             if (buffer.length > 2048) buffer.splice(0, 1024);
 
             processBuffer();
@@ -194,71 +163,55 @@
 
         function processBuffer() {
             while (buffer.length >= 4) {
-                // Strategy A: Standard NeuroSky Sync [AA] [AA]
-                if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
-                    const len = buffer[2];
-                    if (buffer.length >= 3 + len + 1) {
-                        const payload = buffer.slice(3, 3 + len);
-                        parsePayload(payload);
-                        buffer.splice(0, 3 + len + 1); // Consume
-                        continue;
-                    } else {
-                        return; // Wait for more
-                    }
-                }
-
-                // Strategy B: Naked Stream (Often seen on HM-10/Serial bridges)
-                // Look for 0x80 followed immediately by length 0x02
+                // Look for 0x80 Raw Packet (Common in Serial Streams)
+                // Serial streams often strip the 'AA AA' sync bytes to save bandwidth
+                // Format often: [80] [02] [High] [Low]
+                
                 if (buffer[0] === 0x80 && buffer[1] === 0x02) {
                     const val = (buffer[2] << 8) | buffer[3];
-                    updateRaw(val);
-                    buffer.splice(0, 4);
+                    pushVal(val);
+                    buffer.splice(0, 4); // Consume 4 bytes
                     continue;
                 }
 
-                // No sync found, shift 1 byte
-                buffer.shift();
+                // Look for Standard 'AA AA' Sync (Just in case)
+                if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
+                    const len = buffer[2];
+                    if (buffer.length >= 3 + len + 1) {
+                        const payload = buffer.slice(3, 3+len);
+                        parsePayload(payload);
+                        buffer.splice(0, 3+len+1);
+                        continue;
+                    } else {
+                        return; // Wait for data
+                    }
+                }
+
+                buffer.shift(); // No match, slide 1 byte
             }
         }
 
         function parsePayload(payload) {
-            let i = 0;
-            while (i < payload.length) {
-                const code = payload[i];
-                if (code === 0x80) { // Raw Wave
-                    const len = payload[i+1]; // Should be 0x02
-                    const val = (payload[i+2] << 8) | payload[i+3];
-                    updateRaw(val);
-                    i += 4;
-                } else if (code === 0x02) { // Signal Quality
-                    document.getElementById('val-sig').innerText = payload[i+1];
-                    i += 2;
-                } else if (code === 0x04) { // Attention
-                    document.getElementById('val-att').innerText = payload[i+1];
-                    i += 2;
-                } else if (code === 0x05) { // Meditation
-                    document.getElementById('val-med').innerText = payload[i+1];
-                    i += 2;
-                } else {
-                    i++;
+            for(let i=0; i<payload.length-3; i++) {
+                if(payload[i] === 0x80) {
+                     const val = (payload[i+2] << 8) | payload[i+3];
+                     pushVal(val);
+                     return;
                 }
             }
         }
 
-        function updateRaw(val) {
-            let raw = val;
+        function pushVal(raw) {
             if (raw >= 32768) raw -= 65536;
-            
             rawBuffer.push(raw);
             rawBuffer.shift();
         }
 
-        // ════ RENDER ════
+        // ════ DRAW ════
         function draw() {
             ctx.fillStyle = "#000";
             ctx.fillRect(0, 0, cvs.width, cvs.height);
-            
-            ctx.strokeStyle = "#00ff9d";
+            ctx.strokeStyle = "#00e5ff";
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             
@@ -268,11 +221,9 @@
             const mid = h / 2;
 
             for (let i=0; i<rawBuffer.length; i++) {
-                const x = i * step;
-                // Scale: Raw is +/- 2048. Screen is h. 
                 const y = mid - (rawBuffer[i] * (h/4000));
-                if (i===0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+                if (i===0) ctx.moveTo(i*step, y);
+                else ctx.lineTo(i*step, y);
             }
             ctx.stroke();
             requestAnimationFrame(draw);
