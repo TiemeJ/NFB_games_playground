@@ -3,223 +3,124 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V7: Command Fuzzer</title>
+    <title>NeuroScope V8: Targeted Unlock</title>
     <style>
-        :root { --bg: #0f0f13; --panel: #1e1e24; --text: #e0e0e0; --accent: #ff0055; --success: #00ff9d; --info: #00ccff; }
-        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        
-        h1 { border-bottom: 2px solid var(--info); padding-bottom: 10px; margin-bottom: 5px; color: #fff; }
-        .sub { color: #888; font-size: 0.9em; margin-bottom: 30px; }
-
-        button { background: var(--info); color: #000; border: none; padding: 15px 40px; font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 4px; box-shadow: 0 0 15px rgba(0,204,255,0.3); transition: 0.2s; }
-        button:hover { transform: scale(1.05); filter: brightness(1.2); }
-        button:disabled { background: #333; color: #666; cursor: not-allowed; transform: none; box-shadow: none; }
-
-        /* Fuzzer Status */
-        .fuzzer-box { width: 100%; max-width: 800px; background: #2a2a35; border: 2px solid #444; padding: 15px; margin-bottom: 20px; text-align: center; border-radius: 8px; }
-        .fuzzer-label { color: #aaa; font-size: 0.8em; text-transform: uppercase; letter-spacing: 2px; }
-        .fuzzer-val { font-size: 2em; font-weight: bold; color: var(--accent); margin-top: 5px; font-family: 'Courier New', monospace; }
-
-        /* Stats Grid */
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 800px; margin-bottom: 20px; }
-        .card { background: var(--panel); border: 1px solid #333; padding: 20px; border-radius: 8px; text-align: center; }
-        .card.active { border-color: var(--success); background: #1a2e25; }
-        
-        .stat-big { font-size: 3em; font-weight: bold; margin: 10px 0; color: #fff; }
-        .stat-label { color: #888; font-size: 0.8em; text-transform: uppercase; }
-
-        /* Graph */
-        .scope-container { width: 100%; max-width: 800px; height: 250px; background: #000; border: 1px solid #333; border-radius: 4px; position: relative; margin-bottom: 20px; }
-        canvas { width: 100%; height: 100%; display: block; }
-
-        /* Log */
-        #log { width: 100%; max-width: 800px; height: 150px; background: #000; border: 1px solid #333; overflow-y: auto; font-size: 11px; padding: 15px; white-space: pre-wrap; color: #aaa; border-radius: 4px; font-family: 'Courier New', monospace; }
-        .l-ok { color: var(--success); }
-        .l-try { color: var(--accent); }
+        :root { --bg: #111; --text: #eee; --accent: #00ff00; --err: #ff3333; }
+        body { font-family: monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        h1 { color: #fff; border-bottom: 2px solid var(--accent); }
+        button { padding: 15px 30px; font-size: 1.2em; background: var(--accent); color: #000; border: none; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
+        button:disabled { background: #555; cursor: default; }
+        canvas { width: 100%; max-width: 800px; height: 300px; background: #000; border: 1px solid #333; }
+        #log { width: 100%; max-width: 800px; height: 200px; overflow-y: scroll; border: 1px solid #333; padding: 10px; margin-top: 10px; color: #aaa; white-space: pre-wrap; }
+        .success { color: var(--accent); }
+        .error { color: var(--err); }
     </style>
 </head>
 <body>
 
-    <h1>NEUROSCOPE V7</h1>
-    <div class="sub">Brute-Force Command Fuzzer</div>
+    <h1>NEUROSCOPE V8</h1>
+    <div style="color: #888; margin-bottom: 20px;">Target: Service FFE0 / Char FFE1 / Cmd 0x02</div>
 
-    <div class="fuzzer-box">
-        <div class="fuzzer-label">Current Injection</div>
-        <div class="fuzzer-val" id="cmd-disp">WAITING...</div>
-    </div>
-
-    <button id="btn">START FUZZING</button>
-
-    <div class="grid">
-        <div class="card" id="card-a">
-            <div class="stat-label">Channel A (...fff4)</div>
-            <div class="stat-big" id="val-a">0</div>
-            <div class="stat-label">Packets / Sec</div>
-        </div>
-        <div class="card" id="card-b">
-            <div class="stat-label">Channel B (...fff8)</div>
-            <div class="stat-big" id="val-b">0</div>
-            <div class="stat-label">Packets / Sec</div>
-        </div>
-    </div>
-
-    <div class="scope-container">
-        <canvas id="graph"></canvas>
-    </div>
-
-    <div id="log">> Ready. Click START to connect and begin brute-force sequence...</div>
+    <button id="btn">EXECUTE UNLOCK SEQUENCE</button>
+    <canvas id="graph"></canvas>
+    <div id="log">Ready.</div>
 
     <script>
-        // ════ CONFIG ════
-        const PAYLOADS = [
-            { name: "STD (0x02)",   bytes: [0x02] },
-            { name: "NULL (0x00)",  bytes: [0x00] },
-            { name: "RAW (0x80)",   bytes: [0x80] },
-            { name: "SEQ (0x02,00)",bytes: [0x02, 0x00] },
-            { name: "LEGACY (0xC2)",bytes: [0xC2] }
-        ];
-
-        // ════ STATE ════
-        let device, server;
-        let targets = []; // Characteristics to write to
-        let countA = 0, countB = 0;
-        let rawBuffer = new Array(512).fill(0);
-        let activeSource = null;
-        let fuzzerIdx = 0;
-        let fuzzerInterval;
-
-        // ════ UI ════
+        const UUID_SERIAL_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb";
+        const UUID_SERIAL_CHAR    = "0000ffe1-0000-1000-8000-00805f9b34fb";
+        
+        // Also keep MyndBand UUIDs just in case data comes there
+        const UUID_MYND_SERVICE   = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
+        
         const btn = document.getElementById('btn');
         const logEl = document.getElementById('log');
         const cvs = document.getElementById('graph');
         const ctx = cvs.getContext('2d');
+        
+        let rawBuffer = new Array(512).fill(0);
 
-        function log(msg, type='') {
+        function log(msg, cls="") {
             const d = document.createElement('div');
             d.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
-            if(type) d.classList.add(type);
+            if(cls) d.classList.add(cls);
             logEl.appendChild(d);
             logEl.scrollTop = logEl.scrollHeight;
         }
 
-        function resize() { cvs.width = cvs.parentElement.clientWidth; cvs.height = cvs.parentElement.clientHeight; }
-        window.addEventListener('resize', resize);
-        resize();
-
-        // ════ MAIN ════
         btn.addEventListener('click', async () => {
             try {
-                // 1. CONNECT
-                log("Scanning...", 'l-info');
-                device = await navigator.bluetooth.requestDevice({
+                log("Scanning for FFE0 (Serial) & FFF0 (MyndBand)...");
+                const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    optionalServices: ["039afff0-2c94-11e3-9e06-0002a5d5c51b"] // MyndBand
+                    optionalServices: [UUID_SERIAL_SERVICE, UUID_MYND_SERVICE]
                 });
 
-                log("Connecting...");
-                server = await device.gatt.connect();
-                const service = await server.getPrimaryService("039afff0-2c94-11e3-9e06-0002a5d5c51b");
-                log("Service Secured.");
+                log(`Connecting to ${device.name}...`);
+                const server = await device.gatt.connect();
+                log("Connected.", "success");
 
-                // 2. MAP TARGETS
-                const chars = await service.getCharacteristics();
-                for (const c of chars) {
-                    const uuid = c.uuid.substring(4,8);
-                    
-                    // We will attempt to write to EVERYTHING we find
-                    targets.push({ c: c, uuid: uuid });
+                // 1. GET THE UNLOCK CHANNEL (FFE1)
+                log("Accessing Serial Service (FFE0)...");
+                let writeChar = null;
+                try {
+                    const service = await server.getPrimaryService(UUID_SERIAL_SERVICE);
+                    writeChar = await service.getCharacteristic(UUID_SERIAL_CHAR);
+                    log("Found Unlock Channel: ...ffe1", "success");
+                } catch(e) {
+                    log("Could not find FFE0 service! Checking MyndBand...", "error");
+                }
 
-                    // Subscribe
-                    if (c.properties.notify) {
-                        await c.startNotifications();
-                        if (uuid.includes("fff4")) c.addEventListener('characteristicvaluechanged', (e) => handle(e, 'A'));
-                        if (uuid.includes("fff8")) c.addEventListener('characteristicvaluechanged', (e) => handle(e, 'B'));
+                // 2. SETUP LISTENERS (Listen everywhere)
+                const services = await server.getPrimaryServices();
+                for (const s of services) {
+                    const chars = await s.getCharacteristics();
+                    for (const c of chars) {
+                        if (c.properties.notify) {
+                            await c.startNotifications();
+                            c.addEventListener('characteristicvaluechanged', handleData);
+                            log(`Listening on ...${c.uuid.substring(4,8)}`);
+                        }
                     }
                 }
-                log(`Found ${targets.length} Target Characteristics.`);
 
-                // 3. START FUZZER LOOP
+                // 3. SEND THE MAGIC BYTE
+                if (writeChar) {
+                    log(">>> SENDING MAGIC BYTE: 0x02 <<<", "success");
+                    const cmd = new Uint8Array([0x02]);
+                    await writeChar.writeValueWithoutResponse(cmd);
+                    log("Command Sent.", "success");
+                } else {
+                    log("FATAL: Cannot write command. No FFE1 found.", "error");
+                }
+
                 btn.disabled = true;
-                btn.innerText = "FUZZING IN PROGRESS...";
-                requestAnimationFrame(draw);
-                setInterval(updateStats, 1000);
-                
-                // Trigger first immediately, then interval
-                runFuzzStep(); 
-                fuzzerInterval = setInterval(runFuzzStep, 3500); // Every 3.5 seconds
+                btn.innerText = "RUNNING";
+                draw();
 
-            } catch (e) {
-                log("ERROR: " + e.message);
+            } catch(e) {
+                log("ERROR: " + e.message, "error");
             }
         });
 
-        async function runFuzzStep() {
-            // Cycle Payload
-            const payload = PAYLOADS[fuzzerIdx];
-            document.getElementById('cmd-disp').innerText = payload.name;
-            log(`>>> INJECTING: ${payload.name}`, 'l-try');
-
-            const data = new Uint8Array(payload.bytes);
-
-            // Blast to all targets
-            for (const t of targets) {
-                try {
-                    // Blind Write (Without Response is faster and ignores some errors)
-                    await t.c.writeValueWithoutResponse(data);
-                    // log(`   Sent to ...${t.uuid}`);
-                } catch(e) {
-                    // Try with response
-                    try { await t.c.writeValue(data); } catch(err) {}
-                }
-            }
-
-            // Next
-            fuzzerIdx = (fuzzerIdx + 1) % PAYLOADS.length;
-        }
-
-        function handle(event, source) {
+        function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
             
-            if(source === 'A') {
-                countA++;
-                // If A wakes up, we win
-                if(activeSource !== 'A') {
-                    activeSource = 'A';
-                    document.getElementById('card-a').classList.add('active');
-                    clearInterval(fuzzerInterval); // STOP FUZZING
-                    document.getElementById('cmd-disp').innerText = "LOCKED ON!";
-                    document.getElementById('cmd-disp').style.color = "#00ff9d";
-                    log("!!! RAW DATA DETECTED !!!", 'l-ok');
+            // Simple Parse: Look for 0x80 (Raw)
+            for(let i=0; i<data.length-3; i++) {
+                if(data[i] === 0x80) {
+                    let val = (data[i+2] << 8) | data[i+3];
+                    if(val >= 32768) val -= 65536;
+                    rawBuffer.push(val);
+                    rawBuffer.shift();
+                    i+=3;
                 }
             }
-            if(source === 'B') countB++;
-
-            // Extract for graph (Simple approach)
-            for(let i=0; i<data.length; i++) {
-                if(activeSource === source) {
-                    // For visualization, we just take the raw bytes if they look like 16-bit ints
-                    // Or look for 0x80 header
-                    if(data[i] === 0x80 && i+3 < data.length) {
-                        let val = (data[i+2] << 8) | data[i+3];
-                        if(val >= 32768) val -= 65536;
-                        rawBuffer.push(val);
-                        rawBuffer.shift();
-                        i+=3;
-                    }
-                }
-            }
-        }
-
-        function updateStats() {
-            document.getElementById('val-a').innerText = countA;
-            document.getElementById('val-b').innerText = countB;
-            countA = 0; countB = 0;
         }
 
         function draw() {
             ctx.fillStyle = "black";
             ctx.fillRect(0,0, cvs.width, cvs.height);
-            ctx.strokeStyle = activeSource === 'A' ? "#00ff9d" : "#ff0055";
+            ctx.strokeStyle = "#00ff00";
             ctx.lineWidth = 2;
             ctx.beginPath();
             
