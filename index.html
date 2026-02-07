@@ -3,55 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V17: The Lockpicker</title>
+    <title>NeuroScope V18: Fire Hose</title>
     <style>
-        :root { --bg: #000; --panel: #111; --text: #eee; --accent: #ff0055; --success: #00ff88; }
-        body { font-family: 'Courier New', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        :root { --bg: #000; --text: #eee; --accent: #ff9900; --green: #00ff00; }
+        body { font-family: 'Consolas', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        h1 { border-bottom: 2px solid var(--accent); padding-bottom: 10px; color: #fff; text-transform: uppercase; letter-spacing: 2px; }
+        h1 { margin: 0 0 20px 0; border-bottom: 2px solid var(--accent); color: #fff; }
+
+        .dash { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 800px; }
         
-        /* Dashboard */
-        .dash { display: grid; grid-template-columns: 1fr; gap: 20px; width: 100%; max-width: 600px; margin-top: 20px; }
-        
-        /* Status Box */
-        .status-box { background: var(--panel); border: 2px solid #333; padding: 20px; border-radius: 8px; text-align: center; }
-        .status-box.found { border-color: var(--success); box-shadow: 0 0 30px rgba(0,255,136,0.2); }
-        
-        .val-large { font-size: 3em; font-weight: bold; color: #fff; margin: 10px 0; }
+        .box { background: #111; padding: 20px; border: 1px solid #333; text-align: center; border-radius: 8px; }
+        .val { font-size: 3em; font-weight: bold; color: #fff; }
         .lbl { color: #888; font-size: 0.8em; text-transform: uppercase; }
         
-        /* Key Display */
-        .key-disp { font-size: 4em; color: var(--accent); font-weight: bold; text-shadow: 0 0 20px var(--accent); }
-        .key-disp.success { color: var(--success); text-shadow: 0 0 20px var(--success); }
-
-        button { background: var(--accent); color: #fff; font-size: 1.2em; padding: 15px 40px; border: none; cursor: pointer; border-radius: 4px; font-weight: bold; margin-bottom: 20px; transition: 0.2s; }
-        button:hover { filter: brightness(1.2); }
+        button { background: var(--accent); color: #000; padding: 15px; font-weight: bold; border: none; cursor: pointer; font-size: 16px; width: 100%; margin-top: 10px; }
+        button:hover { filter: brightness(1.1); }
         button:disabled { background: #333; color: #555; cursor: default; }
 
-        #log { width: 100%; max-width: 600px; height: 150px; background: #080808; border: 1px solid #333; padding: 10px; overflow-y: auto; font-size: 11px; margin-top: 20px; color: #666; }
+        #log { width: 100%; max-width: 800px; height: 300px; background: #050505; border: 1px solid #333; margin-top: 20px; overflow-y: scroll; font-size: 11px; padding: 10px; color: #888; }
+        .tx { color: var(--accent); }
+        .success { color: var(--green); background: #003300; padding: 2px; }
     </style>
 </head>
 <body>
 
-    <h1>NeuroScope V17: Lockpicker</h1>
+    <h1>NEUROSCOPE V18: FIRE HOSE</h1>
     
-    <button id="btn">START BRUTE FORCE SCAN</button>
-
     <div class="dash">
-        <div class="status-box" id="box-key">
-            <div class="lbl">Injecting Command</div>
-            <div class="key-disp" id="curr-key">--</div>
-            <div class="lbl" id="key-desc">Waiting...</div>
+        <div class="box">
+            <div class="lbl">Last Injected</div>
+            <div class="val" id="curr-key" style="color:var(--accent)">--</div>
         </div>
-
-        <div class="status-box" id="box-speed">
+        <div class="box">
             <div class="lbl">Stream Speed</div>
-            <div class="val-large" id="val-bps">0</div>
-            <div class="lbl">Bytes Per Second</div>
+            <div class="val" id="bps">0</div>
         </div>
     </div>
+    
+    <button id="btn">CONNECT & START FIRE HOSE</button>
 
-    <div id="log">Ready to scan.</div>
+    <div id="log">Ready.</div>
 
     <script>
         // ════ CONFIG ════
@@ -61,53 +52,51 @@
         ];
 
         // ════ STATE ════
-        let device, server, writeChar;
+        let writeChar;
         let byteCount = 0;
         let lastByteCount = 0;
-        let isRunning = false;
-        let currentByte = 0;
-        let foundKey = false;
-
+        let scanIdx = 0;
+        let timer;
+        
         // ════ UI ════
         const ui = {
             btn: document.getElementById('btn'),
             key: document.getElementById('curr-key'),
-            desc: document.getElementById('key-desc'),
-            bps: document.getElementById('val-bps'),
-            boxKey: document.getElementById('box-key'),
-            boxSpeed: document.getElementById('box-speed'),
+            bps: document.getElementById('bps'),
             log: document.getElementById('log')
         };
 
-        function log(msg) {
+        function log(msg, cls='') {
             const d = document.createElement('div');
-            d.innerText = `> ${msg}`;
+            d.innerHTML = `> ${msg}`;
+            if(cls) d.classList.add(cls);
             ui.log.prepend(d);
+            // Limit log size
+            if(ui.log.children.length > 200) ui.log.lastElementChild.remove();
         }
 
-        // ════ CONNECT ════
+        // ════ MAIN ════
         ui.btn.addEventListener('click', async () => {
             try {
+                // 1. CONNECT
                 log("Scanning...");
-                device = await navigator.bluetooth.requestDevice({
+                const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
                     optionalServices: SERVICES
                 });
 
                 log("Connecting...");
-                server = await device.gatt.connect();
+                const server = await device.gatt.connect();
                 
-                // SETUP CHANNELS
+                // 2. SETUP
                 const services = await server.getPrimaryServices();
                 for (const s of services) {
                     const chars = await s.getCharacteristics();
                     for (const c of chars) {
-                        // Priority Write Channel: FFE1
+                        // Priority: FFE1
                         if (c.uuid.includes('ffe1')) writeChar = c;
-                        // Fallback Write Channel
                         else if ((c.properties.write || c.properties.writeWithoutResponse) && !writeChar) writeChar = c;
                         
-                        // Listen
                         if (c.properties.notify) {
                             await c.startNotifications();
                             c.addEventListener('characteristicvaluechanged', (e) => {
@@ -117,15 +106,28 @@
                     }
                 }
 
-                if(!writeChar) throw new Error("No Write Channel Found!");
-                log(`Targeting Write Channel: ...${writeChar.uuid.substring(4,8)}`);
+                if(!writeChar) throw new Error("No Write Channel!");
+                log(`Injector attached to ...${writeChar.uuid.substring(4,8)}`);
                 
+                // 3. START
                 ui.btn.disabled = true;
-                ui.btn.innerText = "SCANNING...";
+                ui.btn.innerText = "RUNNING...";
                 
-                // START LOOPS
-                startSpeedometer();
-                startBruteForce();
+                // Speedometer
+                setInterval(() => {
+                    const speed = byteCount - lastByteCount;
+                    lastByteCount = byteCount;
+                    ui.bps.innerText = speed;
+                    if(speed > 500) {
+                        clearInterval(timer); // STOP SCANNING
+                        log(`!!! UNLOCKED !!! Speed: ${speed} Bps`, 'success');
+                        ui.key.style.color = "#00ff00";
+                        ui.key.innerText = "DONE";
+                    }
+                }, 1000);
+
+                // Fire Hose Loop
+                nextKey();
 
             } catch (e) {
                 log("Error: " + e.message);
@@ -133,88 +135,27 @@
             }
         });
 
-        // ════ SPEEDOMETER ════
-        function startSpeedometer() {
-            setInterval(() => {
-                const speed = byteCount - lastByteCount;
-                lastByteCount = byteCount;
-                
-                ui.bps.innerText = speed;
-                
-                // CHECK FOR SUCCESS
-                if (speed > 500 && !foundKey) {
-                    foundKey = true;
-                    stopBruteForce(speed);
-                }
-            }, 1000);
-        }
-
-        // ════ BRUTE FORCE LOGIC ════
-        async function startBruteForce() {
-            isRunning = true;
+        function nextKey() {
+            if(scanIdx > 255) scanIdx = 0; // Loop forever
             
-            // PRIORITY KEYS (Try these first)
-            const priorities = [0x00, 0x02, 0xC2, 0x80, 0x01, 0x03];
-            
-            for (let key of priorities) {
-                if(foundKey) return;
-                await tryKey(key);
-                await delay(1500); // Give it 1.5s to react
-            }
-
-            // FULL SCAN (0x00 to 0xFF)
-            for (let i = 0; i <= 255; i++) {
-                if(foundKey) return;
-                // Skip ones we already did
-                if (priorities.includes(i)) continue;
-                
-                await tryKey(i);
-                await delay(800); // Fast scan
-            }
-            
-            if(!foundKey) {
-                ui.key.innerText = "FAIL";
-                ui.desc.innerText = "All keys exhausted.";
-            }
-        }
-
-        async function tryKey(byte) {
-            const hex = "0x" + byte.toString(16).toUpperCase().padStart(2, '0');
+            const hex = "0x" + scanIdx.toString(16).toUpperCase().padStart(2,'0');
             ui.key.innerText = hex;
-            ui.desc.innerText = "Injecting...";
             
-            try {
-                const cmd = new Uint8Array([byte]);
-                if (writeChar.properties.writeWithoutResponse) {
-                    await writeChar.writeValueWithoutResponse(cmd);
-                } else {
-                    await writeChar.writeValue(cmd);
-                }
-            } catch(e) {
-                log(`Write Error on ${hex}`);
+            const cmd = new Uint8Array([scanIdx]);
+            
+            // FIRE AND FORGET (No Await on purpose, or minimal await)
+            if(writeChar.properties.writeWithoutResponse) {
+                writeChar.writeValueWithoutResponse(cmd).catch(e => {});
+            } else {
+                writeChar.writeValue(cmd).catch(e => {});
             }
+            
+            log(`Injecting ${hex}...`, 'tx');
+            scanIdx++;
+            
+            // Speed of injection (100ms)
+            timer = setTimeout(nextKey, 100); 
         }
-
-        function stopBruteForce(speed) {
-            isRunning = false;
-            const winningHex = ui.key.innerText;
-            
-            ui.boxKey.classList.add("found");
-            ui.boxSpeed.classList.add("found");
-            
-            ui.key.classList.add("success");
-            ui.desc.innerText = "UNLOCK KEY FOUND!";
-            ui.desc.style.color = "#00ff88";
-            ui.desc.style.fontWeight = "bold";
-            
-            ui.btn.innerText = "SUCCESS";
-            ui.btn.style.background = "#00ff88";
-            
-            log(`!!! SUCCESS !!! Raw Stream Unlocked at ${speed} Bps`);
-            log(`THE SECRET KEY IS: ${winningHex}`);
-        }
-
-        function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
     </script>
 </body>
