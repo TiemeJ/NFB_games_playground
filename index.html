@@ -3,66 +3,74 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V11: Unlock & Run</title>
+    <title>NeuroScope V12: Production</title>
     <style>
-        :root { --bg: #000; --panel: #111; --text: #eee; --accent: #00ff00; --warn: #ffcc00; }
-        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        :root { --bg: #0b0f19; --card: #141b2d; --text: #e0e6ed; --accent: #3b82f6; --success: #10b981; --warn: #f59e0b; --err: #ef4444; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; }
         
-        h1 { margin: 0; color: #fff; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
-        button { background: var(--accent); color: #000; font-size: 16px; padding: 15px 40px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 20px; border-radius: 4px; }
-        button:disabled { background: #333; color: #555; cursor: default; }
+        h1 { font-weight: 300; letter-spacing: 2px; margin-bottom: 5px; }
+        .sub { color: #64748b; font-size: 0.9em; margin-bottom: 30px; }
 
-        .dashboard { width: 100%; max-width: 900px; display: grid; gap: 20px; }
+        button { background: var(--accent); color: white; padding: 16px 40px; border-radius: 8px; border: none; font-size: 16px; font-weight: 600; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); }
+        button:hover { transform: translateY(-2px); filter: brightness(1.1); }
+        button:disabled { background: #334155; color: #94a3b8; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* Dashboard */
+        .dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; width: 100%; max-width: 1000px; }
         
-        /* Stats Grid */
-        .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
-        .card { background: var(--panel); padding: 15px; border: 1px solid #333; border-radius: 6px; text-align: center; }
-        .val { font-size: 1.8em; font-weight: bold; color: #fff; }
-        .lbl { color: #888; font-size: 0.7em; text-transform: uppercase; }
-        .active-card { border-color: var(--accent); box-shadow: 0 0 10px rgba(0,255,0,0.2); }
+        /* Status Bar */
+        .status-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .stat-card { background: var(--card); padding: 20px; border-radius: 12px; text-align: center; border: 1px solid rgba(255,255,255,0.05); }
+        .stat-val { font-size: 1.8em; font-weight: 700; color: #fff; margin: 5px 0; }
+        .stat-lbl { font-size: 0.75em; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
+
+        /* Signal Quality Indicators */
+        .sig-good { color: var(--success); text-shadow: 0 0 10px rgba(16, 185, 129, 0.3); }
+        .sig-poor { color: var(--warn); }
+        .sig-bad  { color: var(--err); }
 
         /* Graph */
-        .graph-box { height: 350px; background: #050505; border: 1px solid #333; border-radius: 8px; position: relative; overflow: hidden; }
-        canvas { width: 100%; height: 100%; display: block; }
+        .graph-container { height: 400px; background: #000; border-radius: 12px; border: 1px solid #334155; position: relative; overflow: hidden; box-shadow: inset 0 0 50px rgba(0,0,0,0.5); }
+        canvas { display: block; width: 100%; height: 100%; }
 
-        /* Log */
-        #log { height: 150px; background: #080808; border: 1px solid #333; padding: 15px; overflow-y: auto; font-size: 11px; font-family: 'Courier New', monospace; color: #888; border-radius: 8px; }
-        .tx { color: var(--warn); }
-        .rx { color: var(--accent); }
+        /* Console */
+        #console { height: 100px; background: #0f172a; border-radius: 8px; padding: 15px; font-family: 'Courier New', monospace; font-size: 12px; color: #94a3b8; overflow-y: auto; border: 1px solid #1e293b; }
+        .log-tx { color: var(--warn); }
+        .log-rx { color: var(--success); }
     </style>
 </head>
 <body>
 
-    <h1>NEUROSCOPE V11</h1>
-    <div style="color:#666; margin-bottom: 20px;">Unlock FFE1 -> Listen FFF4/FFE1/FFF8</div>
+    <h1>NEUROSCOPE PRO</h1>
+    <div class="sub">512Hz Raw EEG Streamer • Auto-Stabilized</div>
 
-    <button id="btn">FULL ACTIVATION</button>
+    <button id="btn">CONNECT & ACTIVATE</button>
 
     <div class="dashboard">
-        <div class="stats">
-            <div class="card" id="card-ffe1">
-                <div class="lbl">Serial (FFE1)</div>
-                <div class="val" id="pps-ffe1">0</div>
+        <div class="status-bar">
+            <div class="stat-card">
+                <div class="stat-lbl">Connection Status</div>
+                <div class="stat-val" id="st-conn">DISCONNECTED</div>
             </div>
-            <div class="card" id="card-fff4">
-                <div class="lbl">MyndBand (FFF4)</div>
-                <div class="val" id="pps-fff4">0</div>
+            <div class="stat-card">
+                <div class="stat-lbl">Skin Contact / Signal</div>
+                <div class="stat-val sig-bad" id="st-sig">--</div>
             </div>
-            <div class="card" id="card-fff8">
-                <div class="lbl">Summary (FFF8)</div>
-                <div class="val" id="pps-fff8">0</div>
+            <div class="stat-card">
+                <div class="stat-lbl">Data Stream</div>
+                <div class="stat-val" id="st-pps">0 PPS</div>
             </div>
         </div>
 
-        <div class="graph-box">
+        <div class="graph-container">
             <canvas id="scope"></canvas>
         </div>
 
-        <div id="log">Ready.</div>
+        <div id="console">Ready to connect...</div>
     </div>
 
     <script>
-        // ════ CONFIG ════
+        // ════ CONFIGURATION ════
         const UUIDS = {
             SERIAL_SERVICE: "0000ffe0-0000-1000-8000-00805f9b34fb",
             SERIAL_CHAR:    "0000ffe1-0000-1000-8000-00805f9b34fb",
@@ -70,184 +78,246 @@
         };
 
         // ════ STATE ════
-        let rawBuffer = new Array(512).fill(0);
-        let counters = { ffe1: 0, fff4: 0, fff8: 0 };
-        let activeSource = null;
-        let buffer = [];
+        let rawBuffer = new Array(1024).fill(0); // 2 seconds of buffer
+        let packetCount = 0;
+        let lastSignalQuality = 200; // Default to 'Off Head'
+        let buffer = []; // Byte accumulator
 
-        // ════ UI ════
-        const btn = document.getElementById('btn');
-        const logEl = document.getElementById('log');
-        const cvs = document.getElementById('scope');
-        const ctx = cvs.getContext('2d');
+        // ════ UI REFERENCES ════
+        const els = {
+            btn: document.getElementById('btn'),
+            log: document.getElementById('console'),
+            conn: document.getElementById('st-conn'),
+            sig: document.getElementById('st-sig'),
+            pps: document.getElementById('st-pps'),
+            cvs: document.getElementById('scope')
+        };
+        const ctx = els.cvs.getContext('2d');
 
-        function log(msg, cls='') {
-            const d = document.createElement('div');
-            d.innerText = `> ${msg}`;
-            if(cls) d.classList.add(cls);
-            logEl.appendChild(d);
-            logEl.scrollTop = logEl.scrollHeight;
+        function log(msg, type='') {
+            const l = document.createElement('div');
+            l.innerText = `> ${msg}`;
+            if(type) l.classList.add(type);
+            els.log.appendChild(l);
+            els.log.scrollTop = els.log.scrollHeight;
         }
 
-        function resize() {
-            cvs.width = cvs.parentElement.clientWidth;
-            cvs.height = cvs.parentElement.clientHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        // ════ MAIN ════
-        btn.addEventListener('click', async () => {
+        // ════ MAIN CONNECTION LOGIC ════
+        els.btn.addEventListener('click', async () => {
             try {
                 // 1. SCAN
-                log("Scanning...", 'tx');
+                log("Scanning for devices...", 'log-tx');
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
                     optionalServices: [UUIDS.SERIAL_SERVICE, UUIDS.MYND_SERVICE]
                 });
 
-                log("Connecting...", 'tx');
+                els.conn.innerText = "CONNECTING...";
+                els.conn.style.color = "#fbbf24";
+                
                 const server = await device.gatt.connect();
+                els.conn.innerText = "CONNECTED";
+                els.conn.style.color = "#10b981";
+                log("Connected.", 'log-rx');
 
-                // 2. LISTEN EVERYWHERE
-                log("Attaching Listeners...", 'tx');
+                // 2. SETUP LISTENERS (ALL CHANNELS)
                 const services = await server.getPrimaryServices();
                 for (const s of services) {
                     const chars = await s.getCharacteristics();
                     for (const c of chars) {
                         if (c.properties.notify) {
                             await c.startNotifications();
-                            const uuid = c.uuid.substring(4,8);
-                            
-                            if (uuid.includes('ffe1')) {
-                                c.addEventListener('characteristicvaluechanged', (e) => handle(e, 'ffe1'));
-                                log("Listening on Serial (FFE1)");
-                            } else if (uuid.includes('fff4')) {
-                                c.addEventListener('characteristicvaluechanged', (e) => handle(e, 'fff4'));
-                                log("Listening on MyndBand (FFF4)");
-                            } else if (uuid.includes('fff8')) {
-                                c.addEventListener('characteristicvaluechanged', (e) => handle(e, 'fff8'));
-                                log("Listening on Summary (FFF8)");
-                            }
+                            c.addEventListener('characteristicvaluechanged', handleData);
+                            log(`Listening on ...${c.uuid.substring(4,8)}`);
                         }
                     }
                 }
 
-                // 3. UNLOCK (Targeting FFE1)
-                log("Locating Unlock Channel (FFE1)...");
+                // 3. UNLOCK SEQUENCE (The "Hybrid" Fix)
+                log("Executing Unlock Sequence...", 'log-tx');
                 try {
-                    const serialService = await server.getPrimaryService(UUIDS.SERIAL_SERVICE);
-                    const unlockChar = await serialService.getCharacteristic(UUIDS.SERIAL_CHAR);
+                    const serial = await server.getPrimaryService(UUIDS.SERIAL_SERVICE);
+                    const unlocker = await serial.getCharacteristic(UUIDS.SERIAL_CHAR);
 
-                    log(">>> INJECTING [0x02] (Config)...", 'tx');
-                    await unlockChar.writeValue(new Uint8Array([0x02]));
-
+                    // Sequence: 0x02 -> Wait -> 0x00
+                    await unlocker.writeValue(new Uint8Array([0x02]));
                     await new Promise(r => setTimeout(r, 50));
-
-                    log(">>> INJECTING [0x00] (Start)...", 'tx');
-                    await unlockChar.writeValue(new Uint8Array([0x00]));
+                    await unlocker.writeValue(new Uint8Array([0x00]));
                     
-                    log("Injection Complete.", 'rx');
+                    log("Unlock Commands Sent.", 'log-rx');
                 } catch(e) {
-                    log("Unlock Failed: " + e.message, 'tx'); // Shouldn't happen based on logs
+                    log("Warning: Serial Unlock failed. Checking stream anyway.", 'log-tx');
                 }
 
-                btn.disabled = true;
-                btn.innerText = "RUNNING";
-                requestAnimationFrame(draw);
-                setInterval(updateStats, 1000);
+                els.btn.disabled = true;
+                els.btn.innerText = "SYSTEM ACTIVE";
+                
+                // Start Loops
+                startRendering();
 
             } catch(e) {
-                log("Error: " + e.message, 'tx');
+                log("Error: " + e.message, 'log-tx');
+                els.conn.innerText = "ERROR";
+                els.conn.style.color = "#ef4444";
             }
         });
 
-        // ════ DATA HANDLING ════
-        function handle(event, source) {
+        // ════ DATA PARSER (Ring Buffer) ════
+        function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
-            counters[source]++;
+            packetCount++;
 
-            // Auto-Switch Highlight
-            if (activeSource !== source && counters[source] > 5) {
-                activeSource = source;
-                document.querySelectorAll('.card').forEach(c => c.classList.remove('active-card'));
-                document.getElementById('card-'+source).classList.add('active-card');
-                log(`Data detected on ${source.toUpperCase()}!`, 'rx');
-            }
-
-            // Buffer & Parse
+            // Accumulate bytes
             for(let i=0; i<data.length; i++) buffer.push(data[i]);
-            if(buffer.length > 2048) buffer.splice(0, 1024);
-            processBuffer();
+            
+            // Limit buffer to prevent leaks
+            if(buffer.length > 4096) buffer.splice(0, 2048);
+
+            parseBuffer();
         }
 
-        function processBuffer() {
+        function parseBuffer() {
+            // We look for signatures of NeuroSky packets
+            // 1. Raw Data: [0x80] [0x02] [High] [Low] (Sometimes naked)
+            // 2. Sync Packets: [0xAA] [0xAA] ...
+            
             while(buffer.length >= 4) {
-                // 1. Raw Signature [80] [02] [H] [L]
-                if (buffer[0] === 0x80 && buffer[1] === 0x02) {
+                const b0 = buffer[0];
+                const b1 = buffer[1];
+
+                // FAST PATH: Naked Raw Packet (Common in Serial)
+                if (b0 === 0x80 && b1 === 0x02) {
                     const val = (buffer[2] << 8) | buffer[3];
-                    pushVal(val);
+                    pushRaw(val);
                     buffer.splice(0, 4);
                     continue;
                 }
-                // 2. Sync [AA] [AA]
-                if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
+
+                // SYNC PATH: Standard Packet
+                if (b0 === 0xAA && b1 === 0xAA) {
                     const len = buffer[2];
-                    if (buffer.length >= 3+len+1) {
-                         // We just consume it to keep buffer clean, or parse if needed
-                         // For now, we trust the 0x80 check above to catch raw inside
-                         // But if 0x80 is inside payload, we need to extract it.
-                         const payload = buffer.slice(3, 3+len);
-                         for(let i=0; i<payload.length-3; i++) {
-                             if(payload[i]===0x80) {
-                                 const val = (payload[i+2]<<8)|payload[i+3];
-                                 pushVal(val);
-                             }
-                         }
-                         buffer.splice(0, 3+len+1);
-                         continue;
-                    } else return;
+                    if (buffer.length >= 3 + len + 1) {
+                        // Extract payload
+                        const payload = buffer.slice(3, 3+len);
+                        parsePayload(payload);
+                        buffer.splice(0, 3 + len + 1);
+                        continue;
+                    } else {
+                        // Wait for rest of packet
+                        return;
+                    }
                 }
+
+                // If no pattern, shift 1
                 buffer.shift();
             }
         }
 
-        function pushVal(val) {
+        function parsePayload(arr) {
+            for (let i = 0; i < arr.length; i++) {
+                const code = arr[i];
+                
+                // Raw Wave (Inside Payload)
+                if (code === 0x80) {
+                    if (i + 3 < arr.length) {
+                        const val = (arr[i+2] << 8) | arr[i+3];
+                        pushRaw(val);
+                        i += 3;
+                    }
+                }
+                // Signal Quality (0 = Good, 200 = Off Head)
+                else if (code === 0x02) {
+                    updateSignal(arr[i+1]);
+                    i++;
+                }
+                else if (code === 0x04 || code === 0x05) {
+                    i++; // Skip Att/Med values
+                }
+            }
+        }
+
+        function pushRaw(val) {
             let raw = val;
-            if(raw >= 32768) raw -= 65536;
+            if (raw >= 32768) raw -= 65536; // Handle signed
             rawBuffer.push(raw);
             rawBuffer.shift();
         }
 
-        function updateStats() {
-            document.getElementById('pps-ffe1').innerText = counters.ffe1;
-            document.getElementById('pps-fff4').innerText = counters.fff4;
-            document.getElementById('pps-fff8').innerText = counters.fff8;
-            counters = { ffe1: 0, fff4: 0, fff8: 0 };
+        function updateSignal(quality) {
+            lastSignalQuality = quality;
+            const el = els.sig;
+            
+            if (quality === 0) {
+                el.innerText = "GOOD CONNECTION";
+                el.className = "stat-val sig-good";
+            } else if (quality === 200) {
+                el.innerText = "OFF HEAD";
+                el.className = "stat-val sig-bad";
+            } else {
+                el.innerText = `POOR (${quality})`;
+                el.className = "stat-val sig-poor";
+            }
         }
 
-        // ════ DRAW ════
-        function draw() {
-            ctx.fillStyle = "#000";
-            ctx.fillRect(0, 0, cvs.width, cvs.height);
-            ctx.strokeStyle = "#00ff00";
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            
-            const w = cvs.width; 
-            const h = cvs.height;
-            const step = w / rawBuffer.length;
-            const mid = h / 2;
-
-            for(let i=0; i<rawBuffer.length; i++) {
-                // Auto-scale: divide by 10 to fit screen? 
-                // Raw is +/- 2000. Canvas height ~350. 
-                const y = mid - (rawBuffer[i] * 0.1);
-                if(i===0) ctx.moveTo(i*step, y);
-                else ctx.lineTo(i*step, y);
+        // ════ RENDERING & STATS ════
+        function startRendering() {
+            // Resize Canvas
+            function resize() {
+                els.cvs.width = els.cvs.parentElement.clientWidth;
+                els.cvs.height = els.cvs.parentElement.clientHeight;
             }
-            ctx.stroke();
-            requestAnimationFrame(draw);
+            window.addEventListener('resize', resize);
+            resize();
+
+            // 1. Animation Loop (60fps)
+            function draw() {
+                const w = els.cvs.width;
+                const h = els.cvs.height;
+                
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0, 0, w, h);
+                
+                // Grid
+                ctx.strokeStyle = "#1e293b";
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, h/2); ctx.lineTo(w, h/2);
+                ctx.stroke();
+
+                // Wave
+                ctx.strokeStyle = "#3b82f6";
+                ctx.lineWidth = 2;
+                ctx.lineJoin = "round";
+                ctx.beginPath();
+                
+                const step = w / rawBuffer.length;
+                
+                // Auto-Gain: If off head, flatline. If on head, scale.
+                const scale = (lastSignalQuality === 200) ? 0 : (h/4000);
+
+                for (let i = 0; i < rawBuffer.length; i++) {
+                    const x = i * step;
+                    const y = (h/2) - (rawBuffer[i] * scale);
+                    if (i===0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                
+                requestAnimationFrame(draw);
+            }
+            draw();
+
+            // 2. Stats Loop (1fps)
+            setInterval(() => {
+                els.pps.innerText = packetCount + " PPS";
+                
+                // Helper: If we have unlocked PPS but 'Off Head', warn user
+                if (packetCount > 100 && lastSignalQuality === 200) {
+                    log("Stream active, but sensor is off head (0x80 muted).", 'log-tx');
+                }
+                
+                packetCount = 0;
+            }, 1000);
         }
     </script>
 </body>
