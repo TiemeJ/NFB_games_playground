@@ -3,70 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand Shotgun Unlocker</title>
+    <title>MyndBand Manual Control</title>
     <style>
-        body { font-family: 'Segoe UI', monospace; background: #1e272e; color: #d2dae2; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        h1 { margin: 0; color: #ff9f43; text-shadow: 0 0 10px rgba(255, 159, 67, 0.5); }
-        .subtitle { color: #808e9b; font-size: 0.9em; margin-bottom: 20px; }
-        
-        /* Signal Indicator */
+        body { font-family: 'Segoe UI', monospace; background: #2d3436; color: #dfe6e9; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        h1 { margin: 0; color: #74b9ff; }
+        .subtitle { color: #b2bec3; font-size: 0.9em; margin-bottom: 20px; }
+
+        /* Signal Box */
         #sig-box { 
-            padding: 15px 30px; border-radius: 10px; font-size: 24px; font-weight: bold; 
-            margin-bottom: 20px; text-align: center; border: 2px solid #576574;
-            transition: all 0.3s ease;
+            padding: 10px 30px; border-radius: 8px; font-size: 20px; font-weight: bold; 
+            margin-bottom: 20px; border: 2px solid #636e72; background: #2d3436; color: #b2bec3;
         }
-        .sig-off { background: #ff3f34; color: #fff; box-shadow: 0 0 15px #ff3f34; } 
-        .sig-ok  { background: #ffa801; color: #000; } 
-        .sig-good{ background: #0be881; color: #000; box-shadow: 0 0 15px #0be881; } 
+        .sig-good { background: #00b894 !important; color: #000 !important; border-color: #00b894 !important; }
 
-        button { padding: 15px 50px; font-size: 20px; font-weight: bold; background: #0984e3; color: white; border: none; border-radius: 50px; cursor: pointer; transition: 0.2s; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
-        button:hover { transform: scale(1.05); background: #3498db; }
-        button:disabled { background: #485460; transform: none; color: #808e9b; }
+        /* Button Group */
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; width: 100%; max-width: 600px; }
+        button { 
+            padding: 15px; font-size: 14px; font-weight: bold; border: none; border-radius: 8px; cursor: pointer; color: white; transition: 0.2s;
+        }
+        #connectBtn { grid-column: span 2; background: #0984e3; font-size: 18px; }
+        .cmd-btn { background: #636e72; }
+        .cmd-btn:hover { background: #b2bec3; color: #000; }
+        .cmd-btn:active { transform: translateY(2px); }
 
-        /* Oscilloscope */
+        /* Scope */
         .scope-container { 
-            background: #000; border: 3px solid #ff9f43; border-radius: 15px; 
-            width: 100%; max-width: 900px; height: 350px; position: relative; 
-            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            background: #000; border: 2px solid #74b9ff; border-radius: 10px; 
+            width: 100%; max-width: 800px; height: 300px; position: relative; 
         }
-        canvas#rawScope { width: 100%; height: 100%; display: block; }
-        .scope-overlay { position: absolute; top: 10px; left: 15px; color: #ff9f43; font-size: 12px; pointer-events: none; }
+        canvas#rawScope { width: 100%; height: 100%; }
+        .overlay { position: absolute; top: 10px; left: 15px; color: #74b9ff; font-size: 12px; pointer-events: none; }
         
-        #log { width: 100%; max-width: 900px; height: 150px; background: #000; color: #0f0; padding: 10px; margin-top: 15px; overflow-y: scroll; border: 1px solid #333; font-size: 11px; }
+        #log { width: 100%; max-width: 800px; height: 150px; background: #000; color: #0f0; padding: 10px; margin-top: 15px; overflow-y: auto; border: 1px solid #333; font-size: 11px; font-family: monospace; }
     </style>
 </head>
 <body>
 
-    <h1>💥 MyndBand Shotgun Unlocker</h1>
-    <div class="subtitle">Writing 0x02 to ALL Channels (fff4 & fff8)</div>
+    <h1>🎮 MyndBand Manual Control</h1>
+    <div class="subtitle">Prevent Browser Freezing with Manual Commands</div>
 
-    <div id="sig-box" class="sig-off">SIGNAL: --</div>
-    <button id="connectBtn">CONNECT</button>
-    <button id="manualUnlock" style="background:#444; font-size:14px; padding:8px 20px; margin-top:10px;" onclick="forceFire()">Manual Trigger (Fire 0x02)</button>
+    <div id="sig-box">SIGNAL: --</div>
 
-    <div class="scope-container" style="margin-top: 20px;">
-        <div class="scope-overlay">RAW STREAM (512Hz)</div>
+    <div class="controls">
+        <button id="connectBtn">1. CONNECT</button>
+        <button class="cmd-btn" onclick="sendCommand(0x02)">2. SEND UNLOCK (0x02)</button>
+        <button class="cmd-btn" onclick="sendCommand(0x00)">3. SEND RESET (0x00)</button>
+    </div>
+
+    <div class="scope-container">
+        <div class="overlay">RAW STREAM (512Hz)</div>
         <canvas id="rawScope"></canvas>
     </div>
 
-    <pre id="log">Waiting...</pre>
+    <div id="log">Waiting...</div>
 
     <script>
+        // --- CONFIG ---
         const NATIVE_SERVICE = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
         const HM10_SERVICE   = "0000ffe0-0000-1000-8000-00805f9b34fb";
-        
-        const btn = document.getElementById('connectBtn');
-        const sigBox = document.getElementById('sig-box');
+
         const logBox = document.getElementById('log');
-        
-        let writeChars = []; // Array to hold ALL writable characteristics
-        let isRawUnlocked = false;
-        let lastSignal = 200;
-        let retryInterval = null;
+        const sigBox = document.getElementById('sig-box');
+        let writeChars = []; // Stores all writable endpoints
+        let parseBuffer = [];
 
         function log(msg) {
-            const time = new Date().toLocaleTimeString().split(' ')[0];
-            logBox.innerText += `\n[${time}] ${msg}`;
+            const t = new Date().toLocaleTimeString().split(' ')[0];
+            logBox.innerHTML += `<div><span style="color:#555">[${t}]</span> ${msg}</div>`;
             logBox.scrollTop = logBox.scrollHeight;
         }
 
@@ -74,19 +77,18 @@
         const canvas = document.getElementById('rawScope');
         const ctx = canvas.getContext('2d');
         let rawBuffer = new Array(512).fill(0);
-        
+
         function resize() { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; }
         window.addEventListener('resize', resize); resize();
 
         function draw() {
-            const w = canvas.width, h = canvas.height, mid = h/2, scale = h/1500;
-            ctx.fillStyle = "rgba(0,0,0,0.2)";
-            ctx.fillRect(0,0,w,h);
+            const w = canvas.width, h = canvas.height, mid = h/2, scale = h/1200;
+            ctx.fillStyle = "rgba(0,0,0,1)"; 
+            ctx.fillRect(0,0,w,h); // Hard clear for performance
             
-            ctx.lineWidth = 2; 
-            ctx.strokeStyle = isRawUnlocked ? "#ff9f43" : "#485460"; 
-            ctx.beginPath();
+            ctx.lineWidth = 2; ctx.strokeStyle = "#74b9ff"; ctx.beginPath();
             
+            // Optimization: Skip points if buffer is huge
             const step = w/rawBuffer.length;
             for(let i=0; i<rawBuffer.length; i++) {
                 const y = mid - (rawBuffer[i] * scale);
@@ -97,8 +99,8 @@
         }
         draw();
 
-        // --- CONNECT ---
-        btn.addEventListener('click', async () => {
+        // --- BLUETOOTH ---
+        document.getElementById('connectBtn').addEventListener('click', async () => {
             try {
                 sigBox.innerText = "Scanning...";
                 const device = await navigator.bluetooth.requestDevice({
@@ -107,178 +109,127 @@
                 });
 
                 const server = await device.gatt.connect();
-                log("Connected to GATT Server.");
+                log("✅ Connected.");
+                writeChars = []; // Reset targets
 
-                // RESET
-                writeChars = [];
-
-                // 1. HARVEST NATIVE CHANNELS
+                // 1. Setup Native (fff4/fff8)
                 try {
-                    const service = await server.getPrimaryService(NATIVE_SERVICE);
-                    const chars = await service.getCharacteristics();
+                    const svc = await server.getPrimaryService(NATIVE_SERVICE);
+                    const chars = await svc.getCharacteristics();
                     
-                    // Add FFF4 (Command)
-                    const c4 = chars.find(c => c.uuid.includes("fff4"));
-                    if(c4) { writeChars.push(c4); log("✅ Target Acquired: fff4"); }
-
-                    // Add FFF8 (Data - sometimes also Write!)
-                    const c8 = chars.find(c => c.uuid.includes("fff8"));
-                    if(c8) { 
-                        writeChars.push(c8); 
-                        log("✅ Target Acquired: fff8"); 
-                        // Start listening on 8
-                        await c8.startNotifications();
-                        c8.addEventListener('characteristicvaluechanged', handleData);
+                    const cWrite = chars.find(c => c.uuid.includes("fff4"));
+                    if(cWrite) { writeChars.push(cWrite); log("Target: Native Command (fff4)"); }
+                    
+                    const cData = chars.find(c => c.uuid.includes("fff8"));
+                    if(cData) { 
+                        writeChars.push(cData); // Sometimes we write here too
+                        await cData.startNotifications();
+                        cData.addEventListener('characteristicvaluechanged', handleData);
+                        log("👂 Listening on fff8");
                     }
-                    
-                } catch(e) { log("⚠️ Native Scan incomplete: " + e.message); }
+                } catch(e) { log("⚠️ Native setup issue: " + e.message); }
 
-                // 2. HARVEST HM-10 (If available)
+                // 2. Setup HM-10 (ffe1) - Backup
                 try {
-                    const service = await server.getPrimaryService(HM10_SERVICE);
-                    const cE1 = await service.getCharacteristic("0000ffe1-0000-1000-8000-00805f9b34fb");
-                    if(cE1) {
-                        writeChars.push(cE1);
-                        log("✅ Target Acquired: ffe1 (HM-10)");
-                        // Start listening on HM-10 too just in case
-                        await cE1.startNotifications();
-                        cE1.addEventListener('characteristicvaluechanged', handleData);
+                    const svc = await server.getPrimaryService(HM10_SERVICE);
+                    const c = await svc.getCharacteristic("0000ffe1-0000-1000-8000-00805f9b34fb");
+                    if(c) {
+                        writeChars.push(c);
+                        await c.startNotifications(); // Listen here too just in case
+                        c.addEventListener('characteristicvaluechanged', handleData);
+                        log("Target: HM-10 (ffe1)");
                     }
-                } catch(e) { /* ignore */ }
+                } catch(e) {}
 
-                if(writeChars.length === 0) throw new Error("No writable channels found!");
+                document.getElementById('connectBtn').innerText = "CONNECTED";
+                document.getElementById('connectBtn').disabled = true;
 
-                btn.disabled = true;
-                btn.innerText = "Connected";
-                startUnlockLoop();
-
-            } catch(e) {
-                log("Error: " + e.message);
-                sigBox.innerText = "Error";
-            }
+            } catch(e) { log("❌ Error: " + e.message); }
         });
 
-        // --- THE "SHOTGUN" FIRE FUNCTION ---
-        async function forceFire() {
-            const cmd = new Uint8Array([0x02]);
-            log(`🔥 Firing 0x02 to ${writeChars.length} channels...`);
+        // --- COMMAND SENDER ---
+        async function sendCommand(byte) {
+            if(writeChars.length === 0) { log("❌ No channels to write to!"); return; }
             
-            for (const char of writeChars) {
+            const cmd = new Uint8Array([byte]);
+            const hex = "0x" + byte.toString(16).padStart(2,'0').toUpperCase();
+            log(`🚀 Sending ${hex}...`);
+
+            for(const char of writeChars) {
                 try {
-                    const uuidShort = char.uuid.substring(4,8);
+                    // Try WriteWithResponse first, fallback to Without
                     if(char.properties.write) await char.writeValueWithResponse(cmd);
-                    else if(char.properties.writeWithoutResponse) await char.writeValueWithoutResponse(cmd);
-                    log(`   -> Sent to ${uuidShort}`);
+                    else await char.writeValueWithoutResponse(cmd);
                 } catch(e) {
-                    log(`   X Failed ${char.uuid.substring(4,8)}: ${e.message}`);
+                    console.log("Write failed on one channel", e);
                 }
             }
         }
-        window.forceFire = forceFire;
 
-        // --- RETRY LOGIC ---
-        function startUnlockLoop() {
-            // Rapid fire every 500ms
-            retryInterval = setInterval(async () => {
-                if (isRawUnlocked) return; 
-
-                if (lastSignal === 200) {
-                    log("🚫 Waiting for Signal < 200...");
-                    return; 
-                }
-
-                await forceFire();
-
-            }, 500); // 500ms interval
-        }
-
-        // --- PARSER ---
-        let parseBuffer = [];
-
+        // --- EFFICIENT PARSER (No Logs in Loop) ---
         function handleData(event) {
             const chunk = new Uint8Array(event.target.value.buffer);
             for(let i=0; i<chunk.length; i++) parseBuffer.push(chunk[i]);
-            processBuffer();
-        }
-
-        function processBuffer() {
-            while(parseBuffer.length > 0) {
+            
+            // Process max 10 packets per frame to prevent freezing
+            let loops = 0;
+            while(parseBuffer.length > 0 && loops < 50) {
+                loops++;
                 const b = parseBuffer[0];
 
-                // 1. RAW MODE PACKET (0x80) -> SUCCESS!
-                if (b === 0x80) {
-                    if(parseBuffer.length < 4) return;
+                // Check for Raw (0x80)
+                if(b === 0x80) {
+                    if(parseBuffer.length < 4) break; // Wait for more data
                     if(parseBuffer[1] === 0x02) {
-                        if (!isRawUnlocked) {
-                            isRawUnlocked = true;
-                            log("🎉 RAW MODE UNLOCKED! (Stream Active)");
-                            clearInterval(retryInterval); 
-                        }
+                        // Valid Raw Packet
                         const val = (parseBuffer[2] << 8) | parseBuffer[3];
-                        updateScope(val);
+                        pushToScope(val);
                         parseBuffer.splice(0, 4);
                         continue;
                     }
                 }
                 
-                // 2. STANDARD MODE PACKET (Sync AA AA)
-                else if (b === 0xAA) {
+                // Check for Sync (AA AA)
+                if(b === 0xAA) {
                     if(parseBuffer.length >= 2 && parseBuffer[1] === 0xAA) {
-                        if(parseBuffer.length < 4) return;
+                        if(parseBuffer.length < 4) break;
                         const len = parseBuffer[2];
-                        if(parseBuffer.length < 3 + len + 1) return;
+                        if(parseBuffer.length < 3 + len + 1) break;
+                        
+                        // Parse Signal Quality only
                         const payload = parseBuffer.slice(3, 3+len);
-                        parseStandardPayload(payload);
+                        for(let k=0; k<payload.length; k++) {
+                            if(payload[k] === 0x02) updateSignal(payload[k+1]);
+                        }
+                        
                         parseBuffer.splice(0, 3 + len + 1);
                         continue;
-                    } else {
-                        if(parseBuffer.length >= 2 && parseBuffer[1] !== 0xAA) { parseBuffer.shift(); continue; }
-                        if(parseBuffer.length < 2) return;
-                    }
-                }
-                
-                // 3. MYNDBAND WRAPPER (00 00 EA...)
-                else if (b === 0x00 && parseBuffer.length >= 3 && parseBuffer[2] === 0xEA) {
-                     if (parseBuffer.length >= 7) {
-                        const sig = parseBuffer[6];
-                        updateSignalUI(sig);
-                        parseBuffer.splice(0, 3); 
-                     } else return;
+                    } else if (parseBuffer.length >= 2) {
+                        parseBuffer.shift(); continue;
+                    } else break;
                 }
 
-                else if (b === 0x02 && parseBuffer.length >= 2) {
-                    if (parseBuffer[1] <= 200) {
-                        updateSignalUI(parseBuffer[1]);
-                        parseBuffer.splice(0, 2);
-                        continue;
-                    }
+                // Check for Wrapper (00 00 EA)
+                if(b === 0x00 && parseBuffer.length >= 3 && parseBuffer[2] === 0xEA) {
+                     if(parseBuffer.length >= 20) {
+                        updateSignal(parseBuffer[6]); // Signal is usually at index 6
+                        parseBuffer.splice(0, 20);
+                     } else break;
+                     continue;
                 }
-                
-                else {
-                    parseBuffer.shift();
-                }
+
+                parseBuffer.shift(); // Discard unknown byte
             }
         }
 
-        function parseStandardPayload(payload) {
-            for(let i=0; i<payload.length; i++) {
-                if (payload[i] === 0x02) {
-                    updateSignalUI(payload[i+1]);
-                    return;
-                }
-            }
-        }
-
-        function updateSignalUI(sig) {
-            lastSignal = sig;
+        function updateSignal(sig) {
             sigBox.innerText = `SIGNAL: ${sig}`;
-            if (sig === 200) { sigBox.className = "sig-off"; sigBox.innerText += " (Check Fit)"; }
-            else if (sig === 0) { sigBox.className = "sig-good"; sigBox.innerText += " (Perfect)"; }
-            else { sigBox.className = "sig-ok"; sigBox.innerText += " (Noise)"; }
+            if(sig === 0) sigBox.classList.add('sig-good');
+            else sigBox.classList.remove('sig-good');
         }
 
-        function updateScope(val) {
-            if (val > 32768) val -= 65536;
+        function pushToScope(val) {
+            if(val > 32768) val -= 65536;
             rawBuffer.shift();
             rawBuffer.push(val);
         }
