@@ -3,59 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V14: Raw Terminal</title>
+    <title>NeuroScope V16: Universal</title>
     <style>
-        :root { --bg: #1e1e1e; --term: #000; --text: #0f0; --btn: #333; --accent: #00ff00; }
-        body { font-family: 'Consolas', 'Monaco', monospace; background: var(--bg); color: #ccc; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        :root { --bg: #000; --panel: #151515; --text: #eee; --accent: #00ff88; --btn: #333; }
+        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        h1 { color: #fff; border-bottom: 2px solid var(--text); padding-bottom: 10px; }
+        h1 { margin: 0 0 20px 0; border-bottom: 2px solid var(--accent); color: #fff; }
+
+        /* Dashboard */
+        .dash { display: grid; grid-template-columns: 1fr 300px; gap: 20px; width: 100%; max-width: 1200px; height: 600px; }
         
-        /* Layout */
-        .container { display: grid; grid-template-columns: 1fr 300px; gap: 20px; width: 100%; max-width: 1000px; height: 500px; }
+        /* Graph Area */
+        .graph-col { display: flex; flex-direction: column; gap: 10px; }
+        .canvas-box { flex: 1; background: #050505; border: 1px solid #333; border-radius: 8px; position: relative; }
+        canvas { width: 100%; height: 100%; display: block; }
+
+        /* Controls Area */
+        .ctrl-col { background: var(--panel); padding: 20px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; gap: 15px; }
         
-        /* Terminal */
-        .terminal { background: var(--term); border: 2px solid #555; padding: 15px; overflow-y: auto; font-size: 12px; color: var(--text); display: flex; flex-direction: column-reverse; }
-        .term-line { margin-bottom: 2px; border-bottom: 1px solid #111; }
-        .ts { color: #666; margin-right: 10px; }
-        
-        /* Controls */
-        .controls { display: flex; flex-direction: column; gap: 15px; }
-        
-        button { padding: 12px; background: var(--btn); color: #fff; border: 1px solid #555; cursor: pointer; font-family: inherit; transition: 0.2s; }
+        .stat-box { background: #000; padding: 15px; border: 1px solid #444; border-radius: 4px; text-align: center; }
+        .stat-val { font-size: 1.8em; font-weight: bold; color: #fff; }
+        .stat-lbl { color: #888; font-size: 0.7em; text-transform: uppercase; }
+
+        button { padding: 12px; background: var(--btn); color: #fff; border: 1px solid #555; cursor: pointer; border-radius: 4px; font-weight: bold; transition: 0.2s; }
         button:hover { background: #444; border-color: #fff; }
-        button.connect { background: var(--accent); color: #000; font-weight: bold; }
         
-        .stat-box { background: #252526; padding: 10px; border: 1px solid #333; }
-        .stat-val { font-size: 1.5em; font-weight: bold; color: #fff; }
-        .stat-lbl { font-size: 0.7em; text-transform: uppercase; color: #888; }
-        
-        .byte-cnt { color: #fff; }
+        button.connect { background: var(--accent); color: #000; font-size: 1.1em; }
+        button.mode { background: #007acc; }
+
+        .log-box { flex: 1; background: #000; border: 1px solid #333; padding: 10px; font-family: 'Courier New', monospace; font-size: 11px; overflow-y: auto; color: #aaa; }
     </style>
 </head>
 <body>
 
-    <h1>NEUROSCOPE V14: RAW TERMINAL</h1>
-    
-    <div class="container">
-        <div class="terminal" id="term">
-            <div class="term-line">> Ready. Waiting for connection...</div>
+    <h1>NEUROSCOPE V16: UNIVERSAL GRAPHER</h1>
+
+    <div class="dash">
+        <div class="graph-col">
+            <div class="canvas-box">
+                <canvas id="scope"></canvas>
+            </div>
         </div>
 
-        <div class="controls">
-            <button id="btn-conn" class="connect">CONNECT</button>
+        <div class="ctrl-col">
+            <button id="btn-conn" class="connect">1. CONNECT</button>
+            
+            <div class="stat-box">
+                <div class="stat-lbl">Status</div>
+                <div class="stat-val" id="st-conn" style="color:#aaa">OFFLINE</div>
+            </div>
+
+            <div style="font-size:0.8em; color:#888; text-transform:uppercase;">2. Kickstart Stream</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:5px;">
+                <button onclick="sendHex([0x02])">TX: 0x02</button>
+                <button onclick="sendHex([0x00])">TX: 0x00</button>
+                <button onclick="sendHex([0xC2])">TX: 0xC2</button>
+                <button onclick="sendStr('c')">TX: "c"</button>
+            </div>
+
+            <div style="font-size:0.8em; color:#888; text-transform:uppercase; margin-top:10px;">3. Tune Graph</div>
+            <button id="btn-mode" class="mode" onclick="toggleMode()">MODE: A (Big Endian)</button>
             
             <div class="stat-box">
                 <div class="stat-lbl">Incoming Data</div>
-                <div class="stat-val" id="byte-counter">0 Bytes</div>
-                <div class="stat-lbl" id="pps-counter">0 PPS</div>
+                <div class="stat-val" id="byte-counter">0</div>
             </div>
 
-            <div style="font-size:0.8em; color:#aaa; margin-top:10px;">MANUAL KICK (INJECT)</div>
-            <button onclick="sendHex([0x02])">TX: 0x02 (BIN)</button>
-            <button onclick="sendStr('c')">TX: "c" (ASCII)</button>
-            <button onclick="sendHex([0x00])">TX: 0x00 (BIN)</button>
-            <button onclick="sendHex([0xC2])">TX: 0xC2 (LEGACY)</button>
-            <button onclick="sendHex([0x02, 0x00])">TX: 02 00 (SEQ)</button>
+            <div class="log-box" id="log">Ready.</div>
         </div>
     </div>
 
@@ -68,29 +82,29 @@
         ];
 
         // ════ STATE ════
-        let device, server;
-        let writeChar = null;
-        let totalBytes = 0;
-        let pps = 0;
+        let device, server, writeChar;
+        let rawBuffer = new Array(512).fill(0);
+        let byteCount = 0;
+        let buffer = [];
+        
+        // MODES: 0=BigEndian, 1=LittleEndian, 2=NeuroSky
+        let parseMode = 0; 
+        const MODES = ["A (Big Endian)", "B (Little Endian)", "C (NeuroSky Sync)"];
 
         // ════ UI ════
-        const term = document.getElementById('term');
-        const countEl = document.getElementById('byte-counter');
-        const ppsEl = document.getElementById('pps-counter');
+        const ui = {
+            conn: document.getElementById('st-conn'),
+            bytes: document.getElementById('byte-counter'),
+            mode: document.getElementById('btn-mode'),
+            log: document.getElementById('log'),
+            cvs: document.getElementById('scope')
+        };
+        const ctx = ui.cvs.getContext('2d');
 
-        function log(msg, isData = false) {
-            const line = document.createElement('div');
-            line.className = 'term-line';
-            const time = new Date().toISOString().split('T')[1].split('.')[0];
-            
-            if (isData) {
-                line.innerHTML = `<span class="ts">[${time}]</span> <span style="color:#fff">${msg}</span>`;
-            } else {
-                line.innerHTML = `<span class="ts">[${time}]</span> <span style="color:#aaa">${msg}</span>`;
-            }
-            
-            term.prepend(line); // Add to top
-            if(term.children.length > 100) term.lastElementChild.remove();
+        function log(msg) {
+            const d = document.createElement('div');
+            d.innerText = "> " + msg;
+            ui.log.prepend(d);
         }
 
         // ════ CONNECT ════
@@ -102,99 +116,159 @@
                     optionalServices: SERVICES
                 });
 
-                log(`Connecting to ${device.name}...`);
+                ui.conn.innerText = "CONNECTING";
                 server = await device.gatt.connect();
-                log("Connected to GATT.");
-
-                // SCAN SERVICES
+                ui.conn.innerText = "CONNECTED";
+                ui.conn.style.color = "#0f0";
+                
+                // SETUP
                 const services = await server.getPrimaryServices();
-                log(`Found ${services.length} Services.`);
-
                 for (const s of services) {
                     const chars = await s.getCharacteristics();
                     for (const c of chars) {
-                        const uuid = c.uuid.substring(4,8);
-                        let props = [];
-                        if(c.properties.write) props.push("W");
-                        if(c.properties.writeWithoutResponse) props.push("WnR");
-                        if(c.properties.notify) props.push("N");
-                        
-                        log(`Found ...${uuid} [${props.join(',')}]`);
-
-                        // 1. SETUP LISTENER
+                        // WRITER
+                        if ((c.properties.write || c.properties.writeWithoutResponse) && !writeChar) writeChar = c;
+                        // LISTENER
                         if (c.properties.notify) {
                             await c.startNotifications();
-                            c.addEventListener('characteristicvaluechanged', (e) => {
-                                handleData(e, uuid);
-                            });
-                            log(`>>> LISTENING ON ...${uuid}`);
-                        }
-
-                        // 2. SETUP WRITER (Prefer FFE1 or first available)
-                        if ((c.properties.write || c.properties.writeWithoutResponse) && !writeChar) {
-                            writeChar = c;
-                            log(`<<< WRITER SET TO ...${uuid}`);
-                        }
-                        // Force override if we find FFE1 (Serial)
-                        if (uuid.includes('ffe1')) {
-                            writeChar = c;
-                            log(`<<< WRITER UPDATED TO SERIAL (...ffe1)`);
+                            c.addEventListener('characteristicvaluechanged', handleData);
+                            log(`Listening on ...${c.uuid.substring(4,8)}`);
                         }
                     }
                 }
-
-                log("SYSTEM READY. Waiting for data...");
-                setInterval(() => {
-                    ppsEl.innerText = pps + " Packets/Sec";
-                    pps = 0;
-                }, 1000);
+                startLoop();
 
             } catch (e) {
-                log("ERROR: " + e.message);
+                log("Error: " + e.message);
+                ui.conn.innerText = "ERROR";
+                ui.conn.style.color = "#f00";
             }
         });
 
-        // ════ DATA HANDLER ════
-        function handleData(event, uuid) {
-            pps++;
-            const data = new Uint8Array(event.target.value.buffer);
-            totalBytes += data.length;
-            countEl.innerText = totalBytes.toLocaleString() + " Bytes";
+        // ════ DATA HANDLING ════
+        function handleData(e) {
+            const data = new Uint8Array(e.target.value.buffer);
+            byteCount += data.length;
+            ui.bytes.innerText = byteCount.toLocaleString();
 
-            // FORMAT HEX
-            let hexStr = "";
-            for(let b of data) {
-                hexStr += b.toString(16).toUpperCase().padStart(2, '0') + " ";
-            }
-            
-            // Log it (Only if slow, or sample if fast)
-            if(pps < 10 || pps % 20 === 0) {
-                log(`RX [${uuid}]: ${hexStr}`, true);
-            }
+            for(let i=0; i<data.length; i++) buffer.push(data[i]);
+            if(buffer.length > 2048) buffer.splice(0, 1024);
+
+            parse();
         }
 
-        // ════ SEND COMMANDS ════
-        window.sendHex = async function(arr) {
-            if(!writeChar) { log("NO WRITE CHANNEL!"); return; }
-            try {
-                const data = new Uint8Array(arr);
-                if(writeChar.properties.writeWithoutResponse) {
-                    await writeChar.writeValueWithoutResponse(data);
-                } else {
-                    await writeChar.writeValue(data);
+        // ════ UNIVERSAL PARSER ════
+        function parse() {
+            // MODE A: BIG ENDIAN (Standard Raw)
+            // Just take every 2 bytes and make a number. No header check.
+            if (parseMode === 0) {
+                while(buffer.length >= 2) {
+                    // Simple heuristic: If raw values are HUGE, we might be misaligned by 1 byte.
+                    // But for now, just stream it.
+                    const val = (buffer[0] << 8) | buffer[1];
+                    pushVal(val);
+                    buffer.splice(0, 2);
                 }
-                log(`TX: [${arr.map(b=>b.toString(16).toUpperCase()).join(' ')}]`);
-            } catch(e) { log("TX FAIL: " + e.message); }
+            }
+            // MODE B: LITTLE ENDIAN
+            else if (parseMode === 1) {
+                while(buffer.length >= 2) {
+                    const val = (buffer[1] << 8) | buffer[0];
+                    pushVal(val);
+                    buffer.splice(0, 2);
+                }
+            }
+            // MODE C: NEUROSKY SYNC (AA AA)
+            else if (parseMode === 2) {
+                while(buffer.length >= 4) {
+                    if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
+                         // We found a packet! Skip header and try to find payload
+                         buffer.shift(); buffer.shift(); // consume AA AA
+                         continue; 
+                         // Note: Ideally we parse len/checksum, but simpler is better here
+                    }
+                    // Also look for 80 02 inside
+                    if (buffer[0] === 0x80 && buffer[1] === 0x02) {
+                        const val = (buffer[2] << 8) | buffer[3];
+                        pushVal(val);
+                        buffer.splice(0, 4);
+                        continue;
+                    }
+                    buffer.shift();
+                }
+            }
         }
 
-        window.sendStr = async function(str) {
-            if(!writeChar) { log("NO WRITE CHANNEL!"); return; }
+        function pushVal(val) {
+            let raw = val;
+            if(raw >= 32768) raw -= 65536; // Signed
+            
+            // Filter noise (if > 2000 or < -2000, likely garbage or blink)
+            // if(Math.abs(raw) > 3000) return; 
+
+            rawBuffer.push(raw);
+            rawBuffer.shift();
+        }
+
+        // ════ CONTROLS ════
+        window.toggleMode = function() {
+            parseMode = (parseMode + 1) % 3;
+            ui.mode.innerText = "MODE: " + MODES[parseMode];
+            log("Switched to " + MODES[parseMode]);
+            buffer = []; // clear buffer to reset alignment
+        }
+
+        window.sendHex = async function(arr) {
+            if(!writeChar) return log("No Write Channel");
             try {
-                const enc = new TextEncoder();
-                const data = enc.encode(str);
-                await writeChar.writeValue(data);
-                log(`TX: "${str}"`);
-            } catch(e) { log("TX FAIL: " + e.message); }
+                const d = new Uint8Array(arr);
+                if(writeChar.properties.writeWithoutResponse) await writeChar.writeValueWithoutResponse(d);
+                else await writeChar.writeValue(d);
+                log(`Sent [${arr}]`);
+            } catch(e) { log("Send Err: " + e.message); }
+        }
+        window.sendStr = async function(s) {
+            if(!writeChar) return log("No Write Channel");
+            try {
+                await writeChar.writeValue(new TextEncoder().encode(s));
+                log(`Sent "${s}"`);
+            } catch(e) { log("Send Err: " + e.message); }
+        }
+
+        // ════ GRAPH ════
+        function startLoop() {
+            function resize() {
+                ui.cvs.width = ui.cvs.parentElement.clientWidth;
+                ui.cvs.height = ui.cvs.parentElement.clientHeight;
+            }
+            window.addEventListener('resize', resize);
+            resize();
+
+            function draw() {
+                const w = ui.cvs.width;
+                const h = ui.cvs.height;
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0,0,w,h);
+                
+                ctx.strokeStyle = "#00ff88";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                
+                const step = w / rawBuffer.length;
+                const mid = h/2;
+                
+                for(let i=0; i<rawBuffer.length; i++) {
+                    // Scaling: 
+                    // Raw signals are usually +/- 500uV (approx +/- 500-1000 int value)
+                    // We scale so it fits.
+                    const y = mid - (rawBuffer[i] * (h/4000));
+                    if(i===0) ctx.moveTo(i*step, y);
+                    else ctx.lineTo(i*step, y);
+                }
+                ctx.stroke();
+                requestAnimationFrame(draw);
+            }
+            draw();
         }
     </script>
 </body>
