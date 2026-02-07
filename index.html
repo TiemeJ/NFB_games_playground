@@ -3,198 +3,244 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand Sniffer & Visualizer</title>
+    <title>MyndBand Force Unlocker</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 30px; color: #333; }
-        h1 { margin: 0; color: #2d3436; }
-        .subtitle { color: #636e72; font-size: 0.9em; margin-bottom: 20px; }
-        #status-box { padding: 10px 20px; background: #dfe6e9; border-radius: 30px; font-weight: bold; color: #636e72; margin-bottom: 20px; }
-        .connected { background: #00b894 !important; color: #fff !important; }
-        button { padding: 15px 40px; font-size: 18px; font-weight: bold; background: #0984e3; color: white; border: none; border-radius: 10px; cursor: pointer; }
-        button:disabled { background: #b2bec3; }
-        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 800px; margin-top: 20px; }
-        .card { background: white; padding: 25px; border-radius: 15px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
-        .value { font-size: 3em; font-weight: bold; color: #2d3436; }
-        .scope-container { background: #000; padding: 10px; border-radius: 15px; width: 100%; max-width: 800px; height: 250px; position: relative; margin-top: 20px; }
+        body { font-family: 'Segoe UI', sans-serif; background: #2d3436; color: #dfe6e9; display: flex; flex-direction: column; align-items: center; padding: 30px; }
+        h1 { margin: 0; color: #0984e3; }
+        .subtitle { color: #b2bec3; font-size: 0.9em; margin-bottom: 20px; }
+        
+        #status-box { padding: 10px 20px; background: #636e72; border-radius: 30px; font-weight: bold; color: #fff; margin-bottom: 20px; border: 1px solid #b2bec3; }
+        .success { background: #00b894 !important; }
+        .fail { background: #d63031 !important; }
+
+        button { padding: 15px 40px; font-size: 18px; font-weight: bold; background: #0984e3; color: white; border: none; border-radius: 10px; cursor: pointer; margin-bottom: 20px; }
+        button:hover { background: #74b9ff; }
+
+        /* Scope */
+        .scope-container { background: #000; border: 2px solid #0984e3; border-radius: 15px; width: 100%; max-width: 800px; height: 300px; position: relative; }
         canvas#rawScope { width: 100%; height: 100%; }
-        .scope-overlay { position: absolute; top: 10px; left: 15px; color: #0f0; font-family: monospace; font-size: 12px; }
-        .section-header { font-size: 1.3em; font-weight: bold; margin-top: 30px; width: 100%; max-width: 800px; }
-        pre#debug-log { background:#1e1e1e; color:#0f0; padding:15px; border-radius:10px; width:100%; max-width:800px; height:300px; overflow-y:auto; font-size:12px; font-family:monospace; white-space:pre-wrap; word-break:break-all; }
+        .scope-overlay { position: absolute; top: 10px; left: 15px; color: #0f0; font-family: monospace; font-size: 12px; pointer-events: none; }
+
+        /* Log */
+        .log-container { width: 100%; max-width: 800px; margin-top: 20px; }
+        pre#debug-log { background:#000; color:#0f0; padding:15px; border-radius:10px; height:200px; overflow-y:auto; font-size:11px; font-family:monospace; white-space:pre-wrap; border: 1px solid #444; }
     </style>
 </head>
 <body>
 
-    <h1>⚡ MyndBand Sniffer</h1>
-    <div class="subtitle">Diagnostic Tool: Inspects Incoming Bytes</div>
+    <h1>🔓 MyndBand Force Unlocker</h1>
+    <div class="subtitle">Targeting Hidden Service 0xFFE0</div>
     
     <div id="status-box">Ready</div>
-    <button id="connectBtn">CONNECT & SNIFF</button>
+    <button id="connectBtn">SCAN FOR HIDDEN SERVICE</button>
 
-    <div class="section-header">⚡ Raw Signal</div>
     <div class="scope-container">
-        <div class="scope-overlay">BUFFER: 512Hz | Last Val: <span id="last-raw">0</span></div>
+        <div class="scope-overlay">RAW DATA (512Hz) | Signal: <span id="sig-val">--</span></div>
         <canvas id="rawScope"></canvas>
     </div>
 
-    <div class="dashboard">
-        <div class="card"><div class="label">Signal</div><div class="value" id="sig-val">--</div></div>
-        <div class="card"><div class="label">Focus</div><div class="value" id="att-val">0</div></div>
+    <div class="log-container">
+        <div style="display:flex; justify-content:space-between; color:#b2bec3; margin-bottom:5px;">
+            <span>Packet Sniffer</span>
+            <span style="cursor:pointer;" onclick="document.getElementById('debug-log').innerText=''">[Clear]</span>
+        </div>
+        <pre id="debug-log">Waiting...</pre>
     </div>
 
-    <div class="section-header">🔍 Data Stream Inspector</div>
-    <pre id="debug-log">Waiting for connection...</pre>
-
     <script>
-        const HM10_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb";
-        const OLD_SERVICE  = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
+        const TARGET_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb";
+        const TARGET_CHAR    = "0000ffe1-0000-1000-8000-00805f9b34fb";
+        
+        // Fallback (The one that works for connection but maybe not unlock)
+        const NATIVE_SERVICE = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
+
         const btn = document.getElementById('connectBtn');
         const statusBox = document.getElementById('status-box');
         const debugLog = document.getElementById('debug-log');
-        let sniffCount = 0; // Only log first 20 packets to avoid spam
+        let sniffCount = 0;
 
         function log(msg) {
             console.log(msg);
-            debugLog.innerText += "\n" + msg;
+            const ts = new Date().toLocaleTimeString().split(' ')[0];
+            debugLog.innerText += `\n[${ts}] ${msg}`;
             debugLog.scrollTop = debugLog.scrollHeight;
         }
 
-        // SCOPE
-        const scopeCanvas = document.getElementById('rawScope');
-        const ctx = scopeCanvas.getContext('2d');
+        // --- VISUALIZER ---
+        const canvas = document.getElementById('rawScope');
+        const ctx = canvas.getContext('2d');
         let rawBuffer = new Array(512).fill(0);
-        function resizeScope() { scopeCanvas.width = scopeCanvas.offsetWidth; scopeCanvas.height = scopeCanvas.offsetHeight; }
-        window.addEventListener('resize', resizeScope); resizeScope();
-        function drawScope() {
-            const w = scopeCanvas.width; const h = scopeCanvas.height; const mid = h/2; const scale = h/2000;
-            ctx.fillStyle = "#000"; ctx.fillRect(0, 0, w, h);
+        
+        function resize() { canvas.width = canvas.offsetWidth; canvas.height = canvas.offsetHeight; }
+        window.addEventListener('resize', resize); resize();
+
+        function draw() {
+            const w = canvas.width, h = canvas.height, mid = h/2, scale = h/1000;
+            ctx.fillStyle = "rgba(0,0,0,0.2)"; // Fade effect
+            ctx.fillRect(0,0,w,h);
             ctx.lineWidth = 2; ctx.strokeStyle = "#00ff00"; ctx.beginPath();
-            const step = w / rawBuffer.length;
+            const step = w/rawBuffer.length;
             for(let i=0; i<rawBuffer.length; i++) {
-                const x = i*step; const y = mid - (rawBuffer[i]*scale);
-                if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                const y = mid - (rawBuffer[i] * scale);
+                if(i===0) ctx.moveTo(i*step, y); else ctx.lineTo(i*step, y);
             }
             ctx.stroke();
-            requestAnimationFrame(drawScope);
+            requestAnimationFrame(draw);
         }
-        drawScope();
+        draw();
 
-        // BLUETOOTH
+        // --- BLUETOOTH CORE ---
         btn.addEventListener('click', async () => {
             try {
-                statusBox.innerText = "Scanning...";
+                statusBox.innerText = "Scanning (Select device with no name if needed)...";
+                sniffCount = 0;
+
+                // STRATEGY: Look for the specific Serial Service first
                 const device = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    optionalServices: [HM10_SERVICE, OLD_SERVICE, "0000ffe0-0000-1000-8000-00805f9b34fb"]
+                    // acceptingAllDevices: true, // Risky in some browsers, trying specific filter first
+                    filters: [
+                        { services: [TARGET_SERVICE] },      // Priority 1: The Hidden Service
+                        { namePrefix: 'Mynd' },              // Priority 2: Standard Name
+                        { namePrefix: 'Mind' }
+                    ],
+                    optionalServices: [TARGET_SERVICE, NATIVE_SERVICE]
                 });
 
+                statusBox.innerText = "Connecting...";
                 const server = await device.gatt.connect();
-                let service = null, cmdChar = null, dataChar = null;
+                let charToUse = null;
 
-                // TRY NATIVE (SPLIT) FIRST based on your success
+                // 1. HUNT FOR FFE1 (The Magic Key)
                 try {
-                    service = await server.getPrimaryService(OLD_SERVICE);
-                    const chars = await service.getCharacteristics();
-                    cmdChar = chars.find(c => c.uuid.includes("fff4"));
-                    dataChar = chars.find(c => c.uuid.includes("fff8"));
-                    if(cmdChar && dataChar) log("✅ Found Split Channels (fff4/fff8)");
-                    else throw new Error("Missing chars");
+                    log("🕵️ Looking for Hidden Service ffe0...");
+                    const service = await server.getPrimaryService(TARGET_SERVICE);
+                    charToUse = await service.getCharacteristic(TARGET_CHAR);
+                    log("🎉 FOUND HIDDEN FFE1! This is the main serial line.");
                 } catch(e) {
-                    log("⚠️ Old Service failed, trying HM-10...");
-                    service = await server.getPrimaryService(HM10_SERVICE);
-                    const c = await service.getCharacteristic("0000ffe1-0000-1000-8000-00805f9b34fb");
-                    cmdChar = c; dataChar = c;
-                    log("✅ Found HM-10 Unified Channel");
+                    log("❌ Hidden Service not accessible.");
+                    
+                    // 2. FALLBACK TO NATIVE
+                    log("⚠️ Trying Native Service fff4/fff8...");
+                    try {
+                        const service = await server.getPrimaryService(NATIVE_SERVICE);
+                        const chars = await service.getCharacteristics();
+                        
+                        // We will try to WRITE to fff4 and READ from fff8
+                        const cmdChar = chars.find(c => c.uuid.includes("fff4"));
+                        const dataChar = chars.find(c => c.uuid.includes("fff8"));
+                        
+                        if (cmdChar && dataChar) {
+                            charToUse = { write: cmdChar, read: dataChar };
+                            log("✅ Using Native Split Channels.");
+                        } else {
+                            throw new Error("Native characteristics missing");
+                        }
+                    } catch(err2) {
+                        throw new Error("No usable services found. Is headset ON?");
+                    }
                 }
 
-                await dataChar.startNotifications();
-                dataChar.addEventListener('characteristicvaluechanged', handleData);
-                log("👂 Listening...");
+                // 3. SETUP LISTENER
+                const readNode = (charToUse.read) ? charToUse.read : charToUse;
+                await readNode.startNotifications();
+                readNode.addEventListener('characteristicvaluechanged', handleData);
+                log("👂 Listening for stream...");
 
-                log("🚀 Sending Unlock (0x02)...");
-                const cmd = new Uint8Array([0x02]);
-                if (cmdChar.properties.write) await cmdChar.writeValueWithResponse(cmd);
-                else await cmdChar.writeValueWithoutResponse(cmd);
-                log("✅ Unlock Sent. Waiting for data...");
+                // 4. THE UNLOCK COMMANDS (Try Variations)
+                const writeNode = (charToUse.write) ? charToUse.write : charToUse;
                 
-                statusBox.innerText = "Connected";
-                statusBox.className = "connected";
-                btn.disabled = true;
+                log("🚀 Sending Unlock Sequence (0x02)...");
+                const cmd = new Uint8Array([0x02]); // Command: Change baud to 57600
+                
+                try {
+                    if (writeNode.properties.write) await writeNode.writeValueWithResponse(cmd);
+                    else await writeNode.writeValueWithoutResponse(cmd);
+                    log("✅ Command Sent.");
+                } catch(err) {
+                    log("⚠️ Write failed: " + err.message);
+                }
 
-            } catch(e) { log("Error: " + e.message); }
+                statusBox.innerText = "Connected & Unlocked?";
+                statusBox.className = "success";
+
+            } catch(e) {
+                log("🔥 Error: " + e.message);
+                statusBox.innerText = "Connection Failed";
+                statusBox.className = "fail";
+            }
         });
 
-        // PARSER & SNIFFER
+        // --- PARSER ---
         let parseBuffer = [];
         function handleData(event) {
             const chunk = new Uint8Array(event.target.value.buffer);
             
-            // --- SNIFFER: Log the first few packets in HEX ---
-            if (sniffCount < 15) {
+            // Log first few packets to see if format changes
+            if (sniffCount < 10) {
                 const hex = Array.from(chunk).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
-                log(`📦 [${chunk.length}B]: ${hex}`);
+                log(`📦 ${hex}`);
                 sniffCount++;
             }
-            // ------------------------------------------------
 
             for(let i=0; i<chunk.length; i++) parseBuffer.push(chunk[i]);
-            processBuffer();
-        }
-
-        function processBuffer() {
-            while (parseBuffer.length > 0) {
+            
+            while(parseBuffer.length > 0) {
                 const b = parseBuffer[0];
                 
-                // SYNC (AA AA)
-                if (b === 0xAA) {
-                    if (parseBuffer.length >= 2 && parseBuffer[1] === 0xAA) {
-                        if (parseBuffer.length < 4) return;
-                        const len = parseBuffer[2];
-                        if (parseBuffer.length < 3 + len + 1) return;
-                        parsePayload(parseBuffer.slice(3, 3+len));
-                        parseBuffer.splice(0, 3 + len + 1);
+                // 1. SYNC (AA AA)
+                if(b === 0xAA) {
+                    if(parseBuffer.length > 1 && parseBuffer[1] === 0xAA) {
+                        // Full packet logic would go here
+                        // For raw mode, we just want to see if we get here
+                        parseBuffer.shift(); parseBuffer.shift(); 
                         continue;
-                    } else {
-                        if (parseBuffer.length < 2) return;
-                        if (parseBuffer[1] !== 0xAA) { parseBuffer.shift(); continue; }
-                    }
-                } 
-                // NAKED RAW (0x80)
+                    } else if (parseBuffer.length > 1) { parseBuffer.shift(); continue; }
+                    else return;
+                }
+                
+                // 2. RAW BYTE (0x80) - The Holy Grail
                 else if (b === 0x80) {
-                    if (parseBuffer.length < 4) return;
-                    if (parseBuffer[1] === 0x02) {
+                    if(parseBuffer.length < 4) return;
+                    if(parseBuffer[1] === 0x02) {
+                        // WE HAVE RAW DATA!
                         const val = (parseBuffer[2] << 8) | parseBuffer[3];
-                        updateRaw(val);
+                        updateScope(val);
                         parseBuffer.splice(0, 4);
                         continue;
-                    } else { parseBuffer.shift(); continue; }
+                    }
                 }
-                else { parseBuffer.shift(); }
+                
+                // 3. SIGNAL BYTE (0x02)
+                else if (b === 0x02 && parseBuffer.length >= 2) {
+                    const sig = parseBuffer[1];
+                    document.getElementById('sig-val').innerText = sig;
+                    parseBuffer.splice(0, 2);
+                }
+
+                // 4. MYNDBAND WRAPPER (00 00 EA...)
+                else if (b === 0x00 && parseBuffer.length >= 3 && parseBuffer[2] === 0xEA) {
+                     // Extract signal from wrapper
+                     // 00 00 EA 00 00 02 [SIG]
+                     if (parseBuffer.length >= 20) {
+                        const sig = parseBuffer[6];
+                        document.getElementById('sig-val').innerText = sig;
+                        parseBuffer.splice(0, 20); // Eat the wrapper
+                     } else return;
+                }
+                
+                else {
+                    parseBuffer.shift();
+                }
             }
         }
 
-        function parsePayload(payload) {
-            let i = 0;
-            while(i < payload.length) {
-                const code = payload[i];
-                if (code === 0x80) { // Raw in payload
-                    const val = (payload[i+2] << 8) | payload[i+3];
-                    updateRaw(val);
-                    i += 4;
-                } else if (code === 0x02) {
-                    document.getElementById('sig-val').innerText = payload[i+1]; i+=2;
-                } else if (code === 0x04) {
-                    document.getElementById('att-val').innerText = payload[i+1]; i+=2;
-                } else { i++; }
-            }
-        }
-
-        function updateRaw(val) {
+        function updateScope(val) {
             if (val > 32768) val -= 65536;
-            document.getElementById('last-raw').innerText = val;
             rawBuffer.shift();
             rawBuffer.push(val);
         }
+
     </script>
 </body>
 </html>
