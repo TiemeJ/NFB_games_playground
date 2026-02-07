@@ -3,280 +3,272 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V3: Diagnostic</title>
+    <title>NeuroScope V4: Deep Serial</title>
     <style>
-        :root { --bg: #0b0c10; --card: #1f2833; --text: #c5c6c7; --accent: #66fcf1; --warn: #45a29e; }
-        body { font-family: 'Consolas', 'Monaco', monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
+        :root { --bg: #000000; --card: #141414; --text: #d0d0d0; --accent: #00ff88; --err: #ff4444; }
+        body { font-family: 'Consolas', monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; }
         
-        h1 { margin: 0; color: #fff; letter-spacing: 2px; }
-        .subtitle { color: var(--warn); font-size: 0.9em; margin-bottom: 20px; }
+        h1 { margin: 0; color: #fff; letter-spacing: 2px; border-bottom: 2px solid var(--accent); padding-bottom: 5px; }
+        .subtitle { color: #888; font-size: 0.8em; margin-bottom: 20px; margin-top: 5px; }
         
-        /* Controls */
-        .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
-        button { padding: 12px 24px; font-size: 14px; font-weight: bold; background: var(--accent); color: #0b0c10; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; }
-        button:hover { filter: brightness(1.2); }
-        button:disabled { background: #333; color: #555; cursor: not-allowed; }
-        
-        .btn-force { background: #ff5252; color: #fff; }
+        button { padding: 15px 30px; font-size: 16px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
+        button:hover { box-shadow: 0 0 15px var(--accent); }
+        button:disabled { background: #333; color: #555; box-shadow: none; cursor: default; }
 
-        /* Dashboard */
-        .dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; width: 100%; max-width: 1000px; }
-        .card { background: var(--card); padding: 15px; border-radius: 5px; border: 1px solid #333; }
-        
+        .dashboard { display: grid; grid-template-columns: 1fr; gap: 15px; width: 100%; max-width: 900px; }
+        .card { background: var(--card); padding: 15px; border: 1px solid #333; border-radius: 6px; }
+
+        /* Stats Grid */
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .stat-box { background: #1a1a1a; padding: 10px; text-align: center; border: 1px solid #333; }
+        .stat-val { font-size: 1.5em; font-weight: bold; color: #fff; }
+        .stat-lbl { font-size: 0.7em; color: var(--accent); text-transform: uppercase; }
+
         /* Canvas */
-        .canvas-container { width: 100%; height: 300px; background: #000; border-radius: 4px; position: relative; border: 1px solid #444; }
-        canvas { display: block; width: 100%; height: 100%; }
+        .canvas-wrap { width: 100%; height: 300px; background: #050505; border: 1px solid #333; position: relative; }
+        canvas { width: 100%; height: 100%; display: block; }
 
-        /* Stats */
-        .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
-        .stat-box { background: #000; padding: 10px; text-align: center; border-radius: 4px; border: 1px solid #333; }
-        .stat-val { font-size: 1.4em; font-weight: bold; color: var(--accent); }
-        .stat-label { font-size: 0.7em; color: #888; text-transform: uppercase; }
-
-        /* Debug Log */
-        #debug-log { 
-            font-size: 11px; 
-            color: #0f0; 
-            height: 200px; 
-            overflow-y: auto; 
-            background: #000; 
-            padding: 15px; 
-            border: 1px solid #333;
-            white-space: pre-wrap;
-            word-break: break-all;
-            line-height: 1.4;
-        }
-        .log-warn { color: #ffcc00; }
-        .log-err { color: #ff5252; }
-        .log-success { color: #66fcf1; }
+        /* Log */
+        #log { font-size: 11px; height: 200px; overflow-y: auto; white-space: pre-wrap; color: #aaa; background: #111; padding: 10px; border: 1px solid #333; }
+        .l-inf { color: #fff; }
+        .l-suc { color: var(--accent); }
+        .l-err { color: var(--err); }
+        .l-wrn { color: #ffbb00; }
     </style>
 </head>
 <body>
 
-    <h1>NEUROSCOPE <span style="color:var(--warn)">V3</span></h1>
-    <div class="subtitle">Diagnostic Mode • Auto-Discovery</div>
+    <h1>NEUROSCOPE V4</h1>
+    <div class="subtitle">Serial/UART Override Mode</div>
 
-    <div class="controls">
-        <button id="connectBtn">1. SCAN & CONNECT</button>
-        <button id="forceBtn" class="btn-force" disabled>2. SEND RAW CMD (0x02)</button>
-    </div>
+    <button id="btnConnect">DEEP SCAN & CONNECT</button>
 
     <div class="dashboard">
-        <div class="stats-row">
+        <div class="stats">
             <div class="stat-box">
-                <div class="stat-label">Packet Rate</div>
-                <div class="stat-val" id="val-fps">0 pps</div>
+                <div class="stat-lbl">Speed</div>
+                <div class="stat-val" id="v-pps">0 pps</div>
             </div>
             <div class="stat-box">
-                <div class="stat-label">Signal</div>
-                <div class="stat-val" id="val-quality">--</div>
+                <div class="stat-lbl">Signal</div>
+                <div class="stat-val" id="v-sig">--</div>
             </div>
             <div class="stat-box">
-                <div class="stat-label">Att / Med</div>
-                <div class="stat-val"><span id="val-att">--</span> / <span id="val-med">--</span></div>
+                <div class="stat-lbl">Att / Med</div>
+                <div class="stat-val"><span id="v-att">--</span> / <span id="v-med">--</span></div>
             </div>
             <div class="stat-box">
-                <div class="stat-label">Last Packet</div>
-                <div class="stat-val" id="val-last" style="font-size: 0.8em; color: #888;">None</div>
+                <div class="stat-lbl">Mode</div>
+                <div class="stat-val" id="v-mode" style="font-size:0.8em; line-height:2.5;">WAITING</div>
             </div>
         </div>
 
         <div class="card">
-            <div class="canvas-container">
-                <canvas id="rawCanvas"></canvas>
-            </div>
+            <div class="canvas-wrap"><canvas id="scope"></canvas></div>
         </div>
 
         <div class="card">
-            <div style="margin-bottom:5px; color:#888; font-size:10px; font-weight:bold;">DEVICE LOG</div>
-            <div id="debug-log">> Ready. Click 'Scan & Connect' to begin diagnostics...</div>
+            <div style="font-size:10px; color:#666; margin-bottom:5px;">SYSTEM LOG</div>
+            <div id="log">Ready to scan...</div>
         </div>
     </div>
 
     <script>
+        // ════ CONFIG ════
+        // We look for these services in order of preference
+        // 1. HM-10 / Serial (Common on older NeuroSky bridges)
+        const UUID_SERIAL = "0000ffe0-0000-1000-8000-00805f9b34fb"; 
+        // 2. MyndBand / ThinkGear (What you connected to before)
+        const UUID_TG     = "039afff0-2c94-11e3-9e06-0002a5d5c51b"; 
+
         // ════ STATE ════
-        let device, server, service;
-        let notifyChar = null;
-        let writeChar = null;
+        let device, server;
+        let dataChar, writeChar;
         let packetCount = 0;
+        let buffer = [];
+        let rawBuffer = new Array(1024).fill(0);
         
-        // Buffers
-        const RAW_SIZE = 512 * 4; 
-        let rawBuffer = new Array(RAW_SIZE).fill(0);
-        
-        // UI
-        const rawCanvas = document.getElementById('rawCanvas');
-        const ctx = rawCanvas.getContext('2d');
-        const debugEl = document.getElementById('debug-log');
-        
+        // ════ UI ════
+        const canvas = document.getElementById('scope');
+        const ctx = canvas.getContext('2d');
+        const logEl = document.getElementById('log');
+
+        function log(msg, cls='') {
+            const d = document.createElement('div');
+            d.innerText = "> " + msg;
+            if(cls) d.classList.add(cls);
+            logEl.appendChild(d);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
         function resize() {
-            rawCanvas.width = rawCanvas.parentElement.clientWidth;
-            rawCanvas.height = rawCanvas.parentElement.clientHeight;
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
         }
         window.addEventListener('resize', resize);
         resize();
 
-        function log(msg, type='') {
-            const line = document.createElement('div');
-            line.innerText = "> " + msg;
-            if (type) line.classList.add('log-'+type);
-            debugEl.appendChild(line);
-            debugEl.scrollTop = debugEl.scrollHeight;
-        }
-
-        // ════ BLUETOOTH ════
-        document.getElementById('connectBtn').addEventListener('click', async () => {
+        // ════ CORE ════
+        document.getElementById('btnConnect').addEventListener('click', async () => {
             try {
-                log("Requesting Device...", 'warn');
-                // We ask for ALL services to ensure we don't miss the Write channel
+                log("Requesting Device (All Services)...", 'l-inf');
+                
                 device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    optionalServices: [
-                        "0000fff0-0000-1000-8000-00805f9b34fb", // Standard
-                        "039afff0-2c94-11e3-9e06-0002a5d5c51b"  // MyndBand Custom
-                    ]
+                    // IMPORTANT: We must ask for permission to access ALL likely services
+                    optionalServices: [UUID_SERIAL, UUID_TG]
                 });
 
-                log(`Connecting to: ${device.name}...`);
+                log(`Connecting to ${device.name}...`);
                 server = await device.gatt.connect();
-                log("Connected to GATT Server.", 'success');
+                log("Connected.", 'l-suc');
 
-                // 1. DISCOVER SERVICES
-                log("Getting Primary Service...");
+                // ─── STRATEGY 1: HUNT FOR SERIAL (FFE0) ───
+                let service = null;
+                let mode = "";
+
                 try {
-                    // Try the custom UUID first (MyndBand specific)
-                    service = await server.getPrimaryService("039afff0-2c94-11e3-9e06-0002a5d5c51b");
+                    log("Attempting UART/Serial (FFE0)...", 'l-wrn');
+                    service = await server.getPrimaryService(UUID_SERIAL);
+                    mode = "SERIAL";
+                    log("Serial Service FOUND!", 'l-suc');
                 } catch(e) {
-                    log("Custom UUID failed, trying Standard UUID...");
-                    service = await server.getPrimaryService("0000fff0-0000-1000-8000-00805f9b34fb");
+                    log("Serial Service not found.", 'l-inf');
                 }
-                log(`Service Found: ${service.uuid}`, 'success');
 
-                // 2. DISCOVER CHARACTERISTICS (The Diagnostic Part)
-                log("--- SCANNED CHARACTERISTICS ---", 'warn');
+                // ─── STRATEGY 2: FALLBACK TO THINKGEAR (FFF0) ───
+                if (!service) {
+                    try {
+                        log("Falling back to ThinkGear (FFF0)...", 'l-wrn');
+                        service = await server.getPrimaryService(UUID_TG);
+                        mode = "THINKGEAR";
+                        log("ThinkGear Service FOUND!", 'l-suc');
+                    } catch(e) {
+                        throw new Error("No compatible service found!");
+                    }
+                }
+
+                document.getElementById('v-mode').innerText = mode;
+
+                // ─── CHARACTERISTIC DISCOVERY ───
+                log("Scanning Characteristics...", 'l-inf');
                 const chars = await service.getCharacteristics();
                 
-                for (const c of chars) {
-                    let props = [];
-                    if (c.properties.read) props.push("READ");
-                    if (c.properties.write) props.push("WRITE");
-                    if (c.properties.writeWithoutResponse) props.push("WRITE_NO_RESP");
-                    if (c.properties.notify) props.push("NOTIFY");
-                    
-                    const uuidShort = c.uuid.split('-')[0]; // First 8 chars
-                    log(`UUID: ...${uuidShort} | Props: [${props.join(', ')}]`);
+                // Reset
+                dataChar = null;
+                writeChar = null;
 
-                    // Auto-assign Notify
-                    if (c.properties.notify && !notifyChar) {
-                        notifyChar = c;
-                        log(`  -> Selected for DATA STREAM (Notify)`, 'success');
+                for (const c of chars) {
+                    const u = c.uuid.substring(4, 8); // Short UUID
+                    const p = [];
+                    if(c.properties.read) p.push("R");
+                    if(c.properties.write) p.push("W");
+                    if(c.properties.writeWithoutResponse) p.push("WnR");
+                    if(c.properties.notify) p.push("N");
+                    
+                    log(`UUID: ...${u} [${p.join(',')}]`);
+
+                    // 1. Find Data Channel (Notify)
+                    // If FFF0 service: Prefer FFF8 over FFF4
+                    // If FFE0 service: Prefer FFE1
+                    if (c.properties.notify) {
+                        if (mode === "THINKGEAR") {
+                            if (u.includes("fff8")) dataChar = c; // PRIORITY
+                            else if (!dataChar) dataChar = c; // Fallback
+                        } else {
+                            dataChar = c; // Serial usually only has one
+                        }
                     }
 
-                    // Auto-assign Write (Prioritize generic write)
-                    if ((c.properties.write || c.properties.writeWithoutResponse) && !writeChar) {
+                    // 2. Find Write Channel
+                    if (c.properties.write || c.properties.writeWithoutResponse) {
                         writeChar = c;
-                        log(`  -> Selected for COMMANDS (Write)`, 'success');
                     }
                 }
-                log("---------------------------------");
 
-                if (!notifyChar) throw new Error("No Notify Characteristic found!");
+                if (!dataChar) throw new Error("No Data Channel (Notify) found!");
                 
-                // 3. START STREAM
-                await notifyChar.startNotifications();
-                notifyChar.addEventListener('characteristicvaluechanged', handleData);
-                log("Listening for data...", 'success');
+                log(`Selected Data: ...${dataChar.uuid.substring(4,8)}`, 'l-suc');
+                if (writeChar) log(`Selected Write: ...${writeChar.uuid.substring(4,8)}`, 'l-suc');
+                else log("WARNING: No Write Channel found (Read Only)", 'l-err');
 
-                // Update UI
-                document.getElementById('connectBtn').disabled = true;
-                document.getElementById('connectBtn').innerText = "CONNECTED";
+                // ─── CONNECT STREAM ───
+                await dataChar.startNotifications();
+                dataChar.addEventListener('characteristicvaluechanged', handleData);
+                log("Stream Started.", 'l-suc');
+                document.getElementById('btnConnect').disabled = true;
+
+                // ─── ATTEMPT UNLOCK ───
                 if (writeChar) {
-                    document.getElementById('forceBtn').disabled = false;
-                    document.getElementById('forceBtn').innerText = "2. SEND RAW CMD (0x02)";
+                    // Try to force raw mode
+                    log("Sending Unlock Commands...", 'l-wrn');
+                    
+                    // Command Sequence for various chips:
+                    // 1. 0x02 (NeuroSky standard "Raw Mode")
+                    // 2. 0x00 (Dump/Stream)
+                    // 3. String "c" (Some serial bridges)
+                    
+                    try {
+                        const cmd1 = new Uint8Array([0x02]); 
+                        await writeChar.writeValue(cmd1);
+                        log("Sent CMD: 0x02", 'l-inf');
+                    } catch(e) { log("CMD 0x02 Failed", 'l-err'); }
+
                 } else {
-                    log("WARNING: Read-Only mode. No Write channel found.", 'err');
+                    log("Cannot send commands (Read Only). Hoping for default stream...", 'l-wrn');
                 }
 
                 // Start Visuals
-                requestAnimationFrame(drawLoop);
+                draw();
                 setInterval(() => {
-                    document.getElementById('val-fps').innerText = packetCount + " pps";
+                    document.getElementById('v-pps').innerText = packetCount + " pps";
+                    // Color code PPS
+                    const s = document.getElementById('v-pps').style;
+                    s.color = packetCount > 100 ? "#0f0" : (packetCount > 0 ? "#fa0" : "#555");
                     packetCount = 0;
                 }, 1000);
 
             } catch (e) {
-                log("ERROR: " + e.message, 'err');
-            }
-        });
-
-        // ════ COMMAND INJECTION ════
-        document.getElementById('forceBtn').addEventListener('click', async () => {
-            if (!writeChar) return;
-            try {
-                // Command: 0x02 (Change Baud to 57600 / Raw Mode)
-                const cmd = new Uint8Array([0x02]); 
-                // Note: If 0x02 fails, try 0x00, or string "0x02"
-                
-                log(`Sending 0x02 to ...${writeChar.uuid.split('-')[0]}...`);
-                await writeChar.writeValue(cmd);
-                log("Command Sent!", 'success');
-            } catch(e) {
-                log("Write Failed: " + e.message, 'err');
+                log("FATAL: " + e.message, 'l-err');
             }
         });
 
         // ════ PARSER ════
-        let buffer = []; 
-        
         function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
             packetCount++;
 
-            // HEX DUMP DEBUG (Sample first packet of every second to keep log clean)
-            if (packetCount === 1) {
-                 const hex = Array.from(data).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
-                 document.getElementById('val-last').innerText = hex;
-                 // log(`RX: ${hex}`);
-            }
-
-            // Push to main buffer
             for (let i=0; i<data.length; i++) buffer.push(data[i]);
-            if (buffer.length > 2048) buffer.splice(0, 1024); // Safety cap
+            
+            // Limit buffer
+            if (buffer.length > 2048) buffer.splice(0, 1024);
 
             processBuffer();
         }
 
         function processBuffer() {
             while (buffer.length >= 3) {
-                // Check 1: Standard NeuroSky [AA] [AA]
+                // Check for Sync [AA] [AA]
                 if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
                     const len = buffer[2];
                     if (buffer.length >= 3 + len + 1) {
                         const payload = buffer.slice(3, 3 + len);
                         const checksum = buffer[3 + len];
                         
-                        // Verify Checksum
+                        // Checksum Calc
                         let sum = 0;
                         for (let b of payload) sum += b;
                         sum = (~sum) & 0xFF;
 
                         if (sum === checksum) {
                             parsePayload(payload);
-                            buffer.splice(0, 3 + len + 1); // Consume packet
+                            buffer.splice(0, 3 + len + 1);
                         } else {
-                            buffer.shift(); // Bad Checksum
+                            buffer.shift(); // Bad checksum
                         }
-                    } else {
-                        return; // Wait for more data
-                    }
-                } 
-                // Check 2: MyndBand Wrapper [00] [00]
-                else if (buffer[0] === 0x00 && buffer[1] === 0x00) {
-                    // Just strip the 00 00 and let the next loop find the inner data
-                    buffer.shift(); buffer.shift(); 
-                }
-                else {
-                    buffer.shift(); // Garbage
+                    } else { return; } // Need more bytes
+                } else {
+                    buffer.shift(); // Not sync
                 }
             }
         }
@@ -286,60 +278,62 @@
             while (i < payload.length) {
                 const code = payload[i];
                 
-                if (code === 0x80) { // RAW (2 bytes)
-                    // Raw value is 16-bit big endian signed
+                if (code === 0x80) { // RAW WAVE
                     const val = (payload[i+1] << 8) | payload[i+2];
                     let raw = val;
                     if (raw >= 32768) raw -= 65536;
                     
                     rawBuffer.push(raw);
                     rawBuffer.shift();
-                    i += 3; // code + 2 bytes
-                }
-                else if (code === 0x02) { // Signal Quality
+                    i += 4; // 1(code) + 1(len) + 2(val) -- WAIT. ThinkGear spec says 0x80 [LEN] [VAL_H] [VAL_L]
+                    // Wait, standard spec:
+                    // [0x80] [0x02] [High] [Low]
+                    // My previous code assumed strict format. Let's verify Length byte.
+                } 
+                else if (code === 0x02) { // Signal
                     const q = payload[i+1];
-                    document.getElementById('val-quality').innerText = q === 0 ? "Good" : (q===200?"Off":"Noise");
+                    document.getElementById('v-sig').innerText = q === 0 ? "GOOD" : (q===200?"OFF":q);
+                    document.getElementById('v-sig').style.color = q===0 ? "#0f0" : "#f00";
                     i += 2;
                 }
-                else if (code === 0x04) { // Attention
-                    document.getElementById('val-att').innerText = payload[i+1];
+                else if (code === 0x04) { // Att
+                    document.getElementById('v-att').innerText = payload[i+1];
                     i += 2;
                 }
-                else if (code === 0x05) { // Meditation
-                    document.getElementById('val-med').innerText = payload[i+1];
+                else if (code === 0x05) { // Med
+                    document.getElementById('v-med').innerText = payload[i+1];
                     i += 2;
                 }
                 else {
-                    i++; // Skip unknown
+                    i++;
                 }
             }
         }
 
         // ════ RENDER ════
-        function drawLoop() {
+        function draw() {
             ctx.fillStyle = "#000";
-            ctx.fillRect(0, 0, rawCanvas.width, rawCanvas.height);
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            ctx.strokeStyle = "#66fcf1";
-            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#00ff88";
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
 
-            const slice = rawBuffer.slice(rawBuffer.length - 1024); // Last ~2 seconds
-            const w = rawCanvas.width;
-            const h = rawCanvas.height;
-            const step = w / slice.length;
+            const h = canvas.height;
+            const w = canvas.width;
+            const mid = h / 2;
+            const len = rawBuffer.length;
+            const step = w / len;
 
-            for (let i = 0; i < slice.length; i++) {
+            for(let i=0; i<len; i++) {
                 const x = i * step;
-                // Auto-Gain: Scale visualization based on signal strength
-                // Raw is +/- 2048 typically.
-                const y = (h/2) - (slice[i] * 0.1); 
-                if (i===0) ctx.moveTo(x, y);
+                // Scale factor: +/- 2048 -> +/- h/2
+                const y = mid - (rawBuffer[i] * (h/1000)); // Zoom
+                if(i===0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
             ctx.stroke();
-
-            requestAnimationFrame(drawLoop);
+            requestAnimationFrame(draw);
         }
     </script>
 </body>
