@@ -3,57 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroOscilloscope V2 (Force Mode)</title>
+    <title>NeuroScope V3: Diagnostic</title>
     <style>
-        :root { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --accent: #00f2ea; --warn: #ff9f43; }
-        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
+        :root { --bg: #0b0c10; --card: #1f2833; --text: #c5c6c7; --accent: #66fcf1; --warn: #45a29e; }
+        body { font-family: 'Consolas', 'Monaco', monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
         
-        h1 { margin: 0; font-weight: 300; letter-spacing: 2px; }
-        .subtitle { color: #888; font-size: 0.8em; margin-bottom: 20px; }
+        h1 { margin: 0; color: #fff; letter-spacing: 2px; }
+        .subtitle { color: var(--warn); font-size: 0.9em; margin-bottom: 20px; }
         
         /* Controls */
         .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
-        button { padding: 10px 20px; font-size: 14px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; }
+        button { padding: 12px 24px; font-size: 14px; font-weight: bold; background: var(--accent); color: #0b0c10; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; }
         button:hover { filter: brightness(1.2); }
-        button:disabled { background: #444; color: #888; cursor: not-allowed; }
+        button:disabled { background: #333; color: #555; cursor: not-allowed; }
         
-        .btn-force { background: var(--warn); color: #000; }
+        .btn-force { background: #ff5252; color: #fff; }
 
         /* Dashboard */
         .dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; width: 100%; max-width: 1000px; }
-        .card { background: var(--card); padding: 15px; border-radius: 8px; border: 1px solid #333; }
-        .canvas-container { width: 100%; height: 250px; background: #000; border-radius: 4px; position: relative; }
+        .card { background: var(--card); padding: 15px; border-radius: 5px; border: 1px solid #333; }
+        
+        /* Canvas */
+        .canvas-container { width: 100%; height: 300px; background: #000; border-radius: 4px; position: relative; border: 1px solid #444; }
         canvas { display: block; width: 100%; height: 100%; }
 
         /* Stats */
         .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
-        .stat-box { background: #252525; padding: 10px; text-align: center; border-radius: 4px; }
-        .stat-val { font-size: 1.2em; font-weight: bold; color: #fff; }
-        .stat-label { font-size: 0.7em; color: #888; }
+        .stat-box { background: #000; padding: 10px; text-align: center; border-radius: 4px; border: 1px solid #333; }
+        .stat-val { font-size: 1.4em; font-weight: bold; color: var(--accent); }
+        .stat-label { font-size: 0.7em; color: #888; text-transform: uppercase; }
 
         /* Debug Log */
         #debug-log { 
-            font-family: 'Courier New', monospace; 
             font-size: 11px; 
             color: #0f0; 
-            height: 120px; 
+            height: 200px; 
             overflow-y: auto; 
             background: #000; 
-            padding: 10px; 
+            padding: 15px; 
+            border: 1px solid #333;
             white-space: pre-wrap;
             word-break: break-all;
+            line-height: 1.4;
         }
+        .log-warn { color: #ffcc00; }
+        .log-err { color: #ff5252; }
+        .log-success { color: #66fcf1; }
     </style>
 </head>
 <body>
 
-    <h1>NEURO<span style="color:var(--accent)">OSCILLOSCOPE</span> V2</h1>
-    <div class="subtitle">512Hz Raw Data • Force Mode Enabled</div>
+    <h1>NEUROSCOPE <span style="color:var(--warn)">V3</span></h1>
+    <div class="subtitle">Diagnostic Mode • Auto-Discovery</div>
 
     <div class="controls">
-        <button id="connectBtn">1. Connect</button>
-        <button id="forceBtn" class="btn-force" disabled>2. Force 512Hz Mode</button>
-        <button id="freezeBtn" disabled>Freeze</button>
+        <button id="connectBtn">1. SCAN & CONNECT</button>
+        <button id="forceBtn" class="btn-force" disabled>2. SEND RAW CMD (0x02)</button>
     </div>
 
     <div class="dashboard">
@@ -67,12 +72,12 @@
                 <div class="stat-val" id="val-quality">--</div>
             </div>
             <div class="stat-box">
-                <div class="stat-label">Attention</div>
-                <div class="stat-val" id="val-att">--</div>
+                <div class="stat-label">Att / Med</div>
+                <div class="stat-val"><span id="val-att">--</span> / <span id="val-med">--</span></div>
             </div>
             <div class="stat-box">
-                <div class="stat-label">Meditation</div>
-                <div class="stat-val" id="val-med">--</div>
+                <div class="stat-label">Last Packet</div>
+                <div class="stat-val" id="val-last" style="font-size: 0.8em; color: #888;">None</div>
             </div>
         </div>
 
@@ -83,24 +88,20 @@
         </div>
 
         <div class="card">
-            <div style="margin-bottom:5px; color:#666; font-size:10px;">DEBUG LOG (HEX DUMP)</div>
-            <div id="debug-log">> Ready. Click Connect.</div>
+            <div style="margin-bottom:5px; color:#888; font-size:10px; font-weight:bold;">DEVICE LOG</div>
+            <div id="debug-log">> Ready. Click 'Scan & Connect' to begin diagnostics...</div>
         </div>
     </div>
 
     <script>
-        // ════ CONFIG ════
-        const SERVICE_UUID = "039afff0-2c94-11e3-9e06-0002a5d5c51b"; 
-        const NOTIFY_UUID  = "039afff8-2c94-11e3-9e06-0002a5d5c51b"; // Read/Notify
-        const WRITE_UUID   = "039afff9-2c94-11e3-9e06-0002a5d5c51b"; // Write Command
-
         // ════ STATE ════
-        let device, server, service, notifyChar, writeChar;
-        let isFreezed = false;
+        let device, server, service;
+        let notifyChar = null;
+        let writeChar = null;
         let packetCount = 0;
         
         // Buffers
-        const RAW_SIZE = 512 * 3; 
+        const RAW_SIZE = 512 * 4; 
         let rawBuffer = new Array(RAW_SIZE).fill(0);
         
         // UI
@@ -115,9 +116,10 @@
         window.addEventListener('resize', resize);
         resize();
 
-        function log(msg) {
+        function log(msg, type='') {
             const line = document.createElement('div');
             line.innerText = "> " + msg;
+            if (type) line.classList.add('log-'+type);
             debugEl.appendChild(line);
             debugEl.scrollTop = debugEl.scrollHeight;
         }
@@ -125,35 +127,75 @@
         // ════ BLUETOOTH ════
         document.getElementById('connectBtn').addEventListener('click', async () => {
             try {
-                log("Scanning...");
+                log("Requesting Device...", 'warn');
+                // We ask for ALL services to ensure we don't miss the Write channel
                 device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    optionalServices: [SERVICE_UUID]
+                    optionalServices: [
+                        "0000fff0-0000-1000-8000-00805f9b34fb", // Standard
+                        "039afff0-2c94-11e3-9e06-0002a5d5c51b"  // MyndBand Custom
+                    ]
                 });
 
-                log("Connecting GATT...");
+                log(`Connecting to: ${device.name}...`);
                 server = await device.gatt.connect();
-                service = await server.getPrimaryService(SERVICE_UUID);
+                log("Connected to GATT Server.", 'success');
 
-                // Get Characteristics
-                log("Getting Characteristics...");
+                // 1. DISCOVER SERVICES
+                log("Getting Primary Service...");
+                try {
+                    // Try the custom UUID first (MyndBand specific)
+                    service = await server.getPrimaryService("039afff0-2c94-11e3-9e06-0002a5d5c51b");
+                } catch(e) {
+                    log("Custom UUID failed, trying Standard UUID...");
+                    service = await server.getPrimaryService("0000fff0-0000-1000-8000-00805f9b34fb");
+                }
+                log(`Service Found: ${service.uuid}`, 'success');
+
+                // 2. DISCOVER CHARACTERISTICS (The Diagnostic Part)
+                log("--- SCANNED CHARACTERISTICS ---", 'warn');
                 const chars = await service.getCharacteristics();
                 
-                // Find Notify (fff8) and Write (fff9)
-                notifyChar = chars.find(c => c.uuid.includes("fff8")) || chars[0];
-                writeChar  = chars.find(c => c.uuid.includes("fff9"));
+                for (const c of chars) {
+                    let props = [];
+                    if (c.properties.read) props.push("READ");
+                    if (c.properties.write) props.push("WRITE");
+                    if (c.properties.writeWithoutResponse) props.push("WRITE_NO_RESP");
+                    if (c.properties.notify) props.push("NOTIFY");
+                    
+                    const uuidShort = c.uuid.split('-')[0]; // First 8 chars
+                    log(`UUID: ...${uuidShort} | Props: [${props.join(', ')}]`);
 
-                // Fallback: If fff9 not found, try to write to fff8
-                if (!writeChar && notifyChar.properties.write) writeChar = notifyChar;
+                    // Auto-assign Notify
+                    if (c.properties.notify && !notifyChar) {
+                        notifyChar = c;
+                        log(`  -> Selected for DATA STREAM (Notify)`, 'success');
+                    }
 
+                    // Auto-assign Write (Prioritize generic write)
+                    if ((c.properties.write || c.properties.writeWithoutResponse) && !writeChar) {
+                        writeChar = c;
+                        log(`  -> Selected for COMMANDS (Write)`, 'success');
+                    }
+                }
+                log("---------------------------------");
+
+                if (!notifyChar) throw new Error("No Notify Characteristic found!");
+                
+                // 3. START STREAM
                 await notifyChar.startNotifications();
                 notifyChar.addEventListener('characteristicvaluechanged', handleData);
-                
-                log("Connected! Listening...");
+                log("Listening for data...", 'success');
+
+                // Update UI
                 document.getElementById('connectBtn').disabled = true;
-                document.getElementById('connectBtn').innerText = "Connected";
-                document.getElementById('forceBtn').disabled = false;
-                document.getElementById('freezeBtn').disabled = false;
+                document.getElementById('connectBtn').innerText = "CONNECTED";
+                if (writeChar) {
+                    document.getElementById('forceBtn').disabled = false;
+                    document.getElementById('forceBtn').innerText = "2. SEND RAW CMD (0x02)";
+                } else {
+                    log("WARNING: Read-Only mode. No Write channel found.", 'err');
+                }
 
                 // Start Visuals
                 requestAnimationFrame(drawLoop);
@@ -163,64 +205,53 @@
                 }, 1000);
 
             } catch (e) {
-                log("ERR: " + e);
+                log("ERROR: " + e.message, 'err');
             }
         });
 
         // ════ COMMAND INJECTION ════
         document.getElementById('forceBtn').addEventListener('click', async () => {
-            if (!writeChar) { log("No Write Characteristic found!"); return; }
-            
+            if (!writeChar) return;
             try {
-                // Command 0x02 is the standard NeuroSky "Enable Raw" command
+                // Command: 0x02 (Change Baud to 57600 / Raw Mode)
                 const cmd = new Uint8Array([0x02]); 
-                // Alternatively try 0x00 if 0x02 fails
-                // const cmd = new Uint8Array([0x00]); 
+                // Note: If 0x02 fails, try 0x00, or string "0x02"
                 
-                log("Sending Command: 0x02 (Force Raw)...");
+                log(`Sending 0x02 to ...${writeChar.uuid.split('-')[0]}...`);
                 await writeChar.writeValue(cmd);
-                log("Command Sent! Watch graph...");
+                log("Command Sent!", 'success');
             } catch(e) {
-                log("Write Failed: " + e);
+                log("Write Failed: " + e.message, 'err');
             }
         });
 
-        document.getElementById('freezeBtn').addEventListener('click', () => {
-            isFreezed = !isFreezed;
-        });
-
         // ════ PARSER ════
-        // We buffer bytes because BLE splits packets randomly
         let buffer = []; 
         
         function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
             packetCount++;
 
-            // HEX DUMP DEBUG (First 50 packets only to avoid lag)
-            // if (packetCount < 50) {
-            //     const hex = Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' ');
-            //     log(`RX: ${hex}`);
-            // }
+            // HEX DUMP DEBUG (Sample first packet of every second to keep log clean)
+            if (packetCount === 1) {
+                 const hex = Array.from(data).map(b => b.toString(16).padStart(2,'0').toUpperCase()).join(' ');
+                 document.getElementById('val-last').innerText = hex;
+                 // log(`RX: ${hex}`);
+            }
 
             // Push to main buffer
             for (let i=0; i<data.length; i++) buffer.push(data[i]);
-            
-            // Limit buffer size to prevent memory leak if sync fails
-            if (buffer.length > 2048) buffer.splice(0, 1024);
+            if (buffer.length > 2048) buffer.splice(0, 1024); // Safety cap
 
             processBuffer();
         }
 
         function processBuffer() {
             while (buffer.length >= 3) {
-                // Look for Sync Bytes
-                // Standard NeuroSky: [AA] [AA]
+                // Check 1: Standard NeuroSky [AA] [AA]
                 if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
-                    // We found a standard packet!
                     const len = buffer[2];
                     if (buffer.length >= 3 + len + 1) {
-                        // Extract Payload
                         const payload = buffer.slice(3, 3 + len);
                         const checksum = buffer[3 + len];
                         
@@ -231,31 +262,21 @@
 
                         if (sum === checksum) {
                             parsePayload(payload);
-                            // Remove this packet from buffer
-                            buffer.splice(0, 3 + len + 1);
+                            buffer.splice(0, 3 + len + 1); // Consume packet
                         } else {
-                            // Bad checksum, shift 1 byte and retry
-                            buffer.shift(); 
+                            buffer.shift(); // Bad Checksum
                         }
                     } else {
-                        // Wait for more data
-                        return;
+                        return; // Wait for more data
                     }
                 } 
-                // MyndBand Wrapper: [00] [00] ... [AA] [AA] inside? 
-                // Or [00] [00] [TYPE] ...
+                // Check 2: MyndBand Wrapper [00] [00]
                 else if (buffer[0] === 0x00 && buffer[1] === 0x00) {
-                    // This is likely a wrapper. Remove header and see what's next.
-                    // Usually MyndBand sends 00 00 [Type] 00 ...
-                    // If we strip the first 2 bytes, the next loop might catch AA AA if it's embedded,
-                    // or we might need to parse specific MyndBand types (EB/EC).
-                    // For now, let's just strip them to expose inner data.
-                    buffer.shift(); 
-                    buffer.shift(); 
+                    // Just strip the 00 00 and let the next loop find the inner data
+                    buffer.shift(); buffer.shift(); 
                 }
                 else {
-                    // Garbage byte, shift
-                    buffer.shift();
+                    buffer.shift(); // Garbage
                 }
             }
         }
@@ -265,63 +286,54 @@
             while (i < payload.length) {
                 const code = payload[i];
                 
-                // 0x80 = RAW WAVE (2 bytes big-endian)
-                if (code === 0x80) {
-                    const len = payload[i+1]; // Should be 2
-                    const val = (payload[i+2] << 8) | payload[i+3];
-                    
-                    // Convert signed 16-bit
+                if (code === 0x80) { // RAW (2 bytes)
+                    // Raw value is 16-bit big endian signed
+                    const val = (payload[i+1] << 8) | payload[i+2];
                     let raw = val;
                     if (raw >= 32768) raw -= 65536;
                     
-                    if (!isFreezed) {
-                        rawBuffer.push(raw);
-                        rawBuffer.shift();
-                    }
-                    i += 4;
+                    rawBuffer.push(raw);
+                    rawBuffer.shift();
+                    i += 3; // code + 2 bytes
                 }
-                // 0x02 = Signal Quality
-                else if (code === 0x02) {
+                else if (code === 0x02) { // Signal Quality
                     const q = payload[i+1];
                     document.getElementById('val-quality').innerText = q === 0 ? "Good" : (q===200?"Off":"Noise");
                     i += 2;
                 }
-                // 0x04 = Attention
-                else if (code === 0x04) {
+                else if (code === 0x04) { // Attention
                     document.getElementById('val-att').innerText = payload[i+1];
                     i += 2;
                 }
-                // 0x05 = Meditation
-                else if (code === 0x05) {
+                else if (code === 0x05) { // Meditation
                     document.getElementById('val-med').innerText = payload[i+1];
                     i += 2;
                 }
                 else {
-                    // Unknown code, try to skip
-                    i++;
+                    i++; // Skip unknown
                 }
             }
         }
 
         // ════ RENDER ════
         function drawLoop() {
-            if (isFreezed) { requestAnimationFrame(drawLoop); return; }
-
-            ctx.clearRect(0, 0, rawCanvas.width, rawCanvas.height);
-            ctx.strokeStyle = "#00f2ea";
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, rawCanvas.width, rawCanvas.height);
+            
+            ctx.strokeStyle = "#66fcf1";
             ctx.lineWidth = 2;
             ctx.beginPath();
 
-            const slice = rawBuffer.slice(rawBuffer.length - 1024);
+            const slice = rawBuffer.slice(rawBuffer.length - 1024); // Last ~2 seconds
             const w = rawCanvas.width;
             const h = rawCanvas.height;
             const step = w / slice.length;
 
             for (let i = 0; i < slice.length; i++) {
                 const x = i * step;
-                // Scale factor: Raw is +/- 2000ish typically. 
-                // We map that to screen height. 
-                const y = (h/2) - (slice[i] * 0.15); 
+                // Auto-Gain: Scale visualization based on signal strength
+                // Raw is +/- 2048 typically.
+                const y = (h/2) - (slice[i] * 0.1); 
                 if (i===0) ctx.moveTo(x, y);
                 else ctx.lineTo(x, y);
             }
