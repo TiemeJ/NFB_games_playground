@@ -3,129 +3,136 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V9: Exact Replay</title>
+    <title>NeuroScope V10: The Sequence</title>
     <style>
-        :root { --bg: #121212; --panel: #1e1e1e; --accent: #00e5ff; --text: #eee; }
-        body { font-family: 'Consolas', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        :root { --bg: #000; --panel: #111; --text: #ddd; --accent: #ffae00; --wave: #00ffcc; }
+        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        h1 { border-bottom: 2px solid var(--accent); padding-bottom: 10px; color: #fff; }
-        button { background: var(--accent); color: #000; font-size: 16px; padding: 15px 30px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 20px; }
-        button:disabled { background: #444; color: #888; cursor: default; }
+        h1 { margin: 0; color: #fff; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
+        button { background: var(--accent); color: #000; font-size: 16px; padding: 15px 40px; border: none; font-weight: bold; cursor: pointer; margin-bottom: 20px; border-radius: 4px; }
+        button:hover { filter: brightness(1.1); }
+        button:disabled { background: #333; color: #555; cursor: default; }
 
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 900px; }
-        .card { background: var(--panel); padding: 15px; border: 1px solid #333; }
-
+        .dashboard { width: 100%; max-width: 900px; display: grid; gap: 20px; }
+        
         /* Stats */
-        .stat-val { font-size: 2em; font-weight: bold; color: #fff; }
-        .stat-lbl { color: var(--accent); font-size: 0.8em; text-transform: uppercase; }
+        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card { background: var(--panel); padding: 20px; border: 1px solid #333; border-radius: 8px; text-align: center; }
+        .val { font-size: 2.5em; font-weight: bold; color: #fff; }
+        .lbl { color: var(--accent); font-size: 0.8em; text-transform: uppercase; letter-spacing: 1px; }
 
-        /* Hex Dump */
-        #hex-dump { 
-            height: 150px; 
-            font-size: 11px; 
-            color: #0f0; 
-            background: #000; 
-            padding: 10px; 
-            overflow-y: auto; 
-            word-break: break-all; 
-            border: 1px solid #333; 
-            font-family: 'Courier New', monospace;
-        }
-
-        /* Canvas */
-        .scope-wrap { height: 300px; background: #000; border: 1px solid #333; position: relative; margin-top: 20px; }
+        /* Graph */
+        .graph-box { height: 350px; background: #050505; border: 1px solid #333; border-radius: 8px; position: relative; overflow: hidden; }
         canvas { width: 100%; height: 100%; display: block; }
-
-        /* Log */
-        #sys-log { margin-top: 10px; color: #666; font-size: 0.9em; max-width: 900px; width: 100%; }
+        
+        /* Console */
+        #console { height: 150px; background: #080808; border: 1px solid #333; padding: 15px; overflow-y: auto; font-size: 11px; font-family: 'Courier New', monospace; color: #888; border-radius: 8px; }
+        .msg-tx { color: var(--accent); }
+        .msg-rx { color: var(--wave); }
+        .msg-err { color: #ff3333; }
     </style>
 </head>
 <body>
 
-    <h1>NEUROSCOPE V9</h1>
-    <div style="margin-bottom: 20px; color: #888;">Protocol: Explicit Write Request (With Response)</div>
+    <h1>NEUROSCOPE V10</h1>
+    <div style="color:#666; margin-bottom: 20px;">Replaying Log Sequence: [0x02] -> 50ms -> [0x00]</div>
 
-    <button id="btn">CONNECT & REPLAY ANDROID LOG</button>
+    <button id="btn">EXECUTE DOUBLE-TAP SEQUENCE</button>
 
-    <div class="grid">
-        <div class="card">
-            <div class="stat-val" id="pps">0</div>
-            <div class="stat-lbl">Packets Per Second</div>
+    <div class="dashboard">
+        <div class="stats">
+            <div class="card">
+                <div class="val" id="pps">0</div>
+                <div class="lbl">Packets / Sec</div>
+            </div>
+            <div class="card">
+                <div class="val" id="last-val">--</div>
+                <div class="lbl">Latest Raw Value</div>
+            </div>
         </div>
-        
-        <div class="card">
-            <div style="margin-bottom: 5px; color: #aaa; font-size: 0.8em;">INCOMING RAW HEX (FIRST 1000 BYTES)</div>
-            <div id="hex-dump">Waiting for stream...</div>
+
+        <div class="graph-box">
+            <canvas id="scope"></canvas>
         </div>
-    </div>
 
-    <div class="scope-wrap" style="width: 100%; max-width: 900px;">
-        <canvas id="graph"></canvas>
+        <div id="console">Ready.</div>
     </div>
-
-    <div id="sys-log">System Ready.</div>
 
     <script>
-        // ════ CONFIG ════
-        // The exact UUIDs from your log analysis
-        const SERVICE_UUID = "0000ffe0-0000-1000-8000-00805f9b34fb";
-        const CHAR_UUID    = "0000ffe1-0000-1000-8000-00805f9b34fb";
-        
-        // Also listen to standard just in case
-        const MYND_UUID    = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
+        // ════ CONFIG (Based on your Log) ════
+        const SERIAL_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb";
+        const SERIAL_CHAR    = "0000ffe1-0000-1000-8000-00805f9b34fb";
+        const MYND_SERVICE   = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
 
         // ════ STATE ════
         let rawBuffer = new Array(512).fill(0);
         let packetCount = 0;
-        let byteLogCount = 0;
+        let buffer = [];
 
         // ════ UI ════
         const btn = document.getElementById('btn');
-        const hexEl = document.getElementById('hex-dump');
-        const ppsEl = document.getElementById('pps');
-        const logEl = document.getElementById('sys-log');
-        const cvs = document.getElementById('graph');
+        const logEl = document.getElementById('console');
+        const cvs = document.getElementById('scope');
         const ctx = cvs.getContext('2d');
+        const ppsEl = document.getElementById('pps');
+        const lastValEl = document.getElementById('last-val');
 
-        function log(msg) { logEl.innerText = "> " + msg; }
-        function resize() { cvs.width = cvs.parentElement.clientWidth; cvs.height = cvs.parentElement.clientHeight; }
+        function log(msg, cls='') {
+            const d = document.createElement('div');
+            d.innerText = `[${Date.now() % 10000}] ${msg}`;
+            if(cls) d.classList.add(cls);
+            logEl.appendChild(d);
+            logEl.scrollTop = logEl.scrollHeight;
+        }
+
+        function resize() {
+            cvs.width = cvs.parentElement.clientWidth;
+            cvs.height = cvs.parentElement.clientHeight;
+        }
         window.addEventListener('resize', resize);
         resize();
 
-        // ════ MAIN ════
+        // ════ CORE LOGIC ════
         btn.addEventListener('click', async () => {
             try {
-                log("Scanning...");
+                // 1. CONNECT
+                log("Scanning...", 'msg-tx');
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    optionalServices: [SERVICE_UUID, MYND_UUID]
+                    optionalServices: [SERIAL_SERVICE, MYND_SERVICE]
                 });
 
-                log("Connecting...");
+                log(`Connecting to ${device.name}...`);
                 const server = await device.gatt.connect();
                 
-                // 1. GET SERIAL SERVICE
-                log("Getting Serial Service (FFE0)...");
-                const service = await server.getPrimaryService(SERVICE_UUID);
-                const char = await service.getCharacteristic(CHAR_UUID);
-                log("Found Serial Characteristic (FFE1).");
+                // 2. GET SERIAL CHARACTERISTIC
+                log("Locating FFE1...", 'msg-tx');
+                const service = await server.getPrimaryService(SERIAL_SERVICE);
+                const char = await service.getCharacteristic(SERIAL_CHAR);
+                log("Found FFE1. Attaching listener...", 'msg-tx');
 
-                // 2. START NOTIFICATIONS FIRST (Like Android)
+                // 3. LISTEN
                 await char.startNotifications();
                 char.addEventListener('characteristicvaluechanged', handleData);
-                log("Listening started.");
 
-                // 3. SEND COMMAND (Strict Mode)
-                log("Sending 0x02 (Write With Response)...");
-                const cmd = new Uint8Array([0x02]);
+                // 4. EXECUTE SEQUENCE (The Double Tap)
+                const cmd1 = new Uint8Array([0x02]); // Config
+                const cmd2 = new Uint8Array([0x00]); // Start
+
+                log(">>> TX: [0x02] (Config)", 'msg-tx');
+                await char.writeValue(cmd1); // Strict Write
+
+                log("... Waiting 50ms ...", 'msg-tx');
+                await new Promise(r => setTimeout(r, 50));
+
+                log(">>> TX: [0x00] (Start)", 'msg-tx');
+                await char.writeValue(cmd2); // Strict Write
+
+                log("Sequence Complete. Listening...", 'msg-rx');
                 
-                // IMPORTANT: We use writeValue (With Response) because the log showed a 'Write Request'
-                await char.writeValue(cmd);
-                
-                log("Command Sent! Waiting for flood...");
                 btn.disabled = true;
                 btn.innerText = "RUNNING";
-
+                
                 // Loops
                 requestAnimationFrame(draw);
                 setInterval(() => {
@@ -133,97 +140,81 @@
                     packetCount = 0;
                 }, 1000);
 
-            } catch (e) {
-                log("ERROR: " + e.message);
-                hexEl.innerText += "\nERROR: " + e.message;
+            } catch(e) {
+                log("FATAL: " + e.message, 'msg-err');
             }
         });
 
-        // ════ PARSER ════
-        let buffer = [];
-
+        // ════ PARSER (Greedy Mode) ════
         function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
             packetCount++;
 
-            // 1. HEX SPY (Debug)
-            if (byteLogCount < 500) { // Only log first 500 bytes to save CPU
-                let s = "";
-                for(let b of data) s += b.toString(16).padStart(2,'0').toUpperCase() + " ";
-                hexEl.innerText += s;
-                byteLogCount += data.length;
-            }
-
-            // 2. BUFFER
-            for (let i=0; i<data.length; i++) buffer.push(data[i]);
-            if (buffer.length > 2048) buffer.splice(0, 1024);
+            // Buffer management
+            for(let i=0; i<data.length; i++) buffer.push(data[i]);
+            if(buffer.length > 2048) buffer.splice(0, 1024);
 
             processBuffer();
         }
 
         function processBuffer() {
-            while (buffer.length >= 4) {
-                // Look for 0x80 Raw Packet (Common in Serial Streams)
-                // Serial streams often strip the 'AA AA' sync bytes to save bandwidth
-                // Format often: [80] [02] [High] [Low]
+            // We search for 0x80 (Raw) followed by 0x02 (Length)
+            // This is the most reliable signature for raw data in these streams
+            while(buffer.length >= 4) {
                 
+                // Check for Raw Packet Signature: [80] [02] [Hi] [Lo]
                 if (buffer[0] === 0x80 && buffer[1] === 0x02) {
                     const val = (buffer[2] << 8) | buffer[3];
-                    pushVal(val);
-                    buffer.splice(0, 4); // Consume 4 bytes
+                    updateGraph(val);
+                    buffer.splice(0, 4); // Remove this packet
                     continue;
                 }
 
-                // Look for Standard 'AA AA' Sync (Just in case)
+                // Check for Sync Packet: [AA] [AA]
                 if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
-                    const len = buffer[2];
-                    if (buffer.length >= 3 + len + 1) {
-                        const payload = buffer.slice(3, 3+len);
-                        parsePayload(payload);
-                        buffer.splice(0, 3+len+1);
-                        continue;
-                    } else {
-                        return; // Wait for data
-                    }
+                    // Just skip sync bytes to let the next loop catch the payload
+                    buffer.shift(); buffer.shift(); 
+                    continue;
                 }
 
-                buffer.shift(); // No match, slide 1 byte
+                // No match, advance 1 byte
+                buffer.shift();
             }
         }
 
-        function parsePayload(payload) {
-            for(let i=0; i<payload.length-3; i++) {
-                if(payload[i] === 0x80) {
-                     const val = (payload[i+2] << 8) | payload[i+3];
-                     pushVal(val);
-                     return;
-                }
-            }
-        }
-
-        function pushVal(raw) {
-            if (raw >= 32768) raw -= 65536;
+        function updateGraph(val) {
+            let raw = val;
+            if(raw >= 32768) raw -= 65536; // Handle negative (Signed 16-bit)
+            
             rawBuffer.push(raw);
             rawBuffer.shift();
+            
+            // UI Update (Throttled visually)
+            lastValEl.innerText = raw;
         }
 
-        // ════ DRAW ════
+        // ════ RENDER ════
         function draw() {
             ctx.fillStyle = "#000";
             ctx.fillRect(0, 0, cvs.width, cvs.height);
-            ctx.strokeStyle = "#00e5ff";
+            
+            ctx.strokeStyle = "#00ffcc";
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             
             const w = cvs.width;
             const h = cvs.height;
-            const step = w / rawBuffer.length;
             const mid = h / 2;
+            const step = w / rawBuffer.length;
 
-            for (let i=0; i<rawBuffer.length; i++) {
-                const y = mid - (rawBuffer[i] * (h/4000));
-                if (i===0) ctx.moveTo(i*step, y);
-                else ctx.lineTo(i*step, y);
+            for(let i=0; i<rawBuffer.length; i++) {
+                const x = i * step;
+                // Scale factor: Raw is usually +/- 2000. Canvas height is 350.
+                // 350 / 4000 = ~0.08
+                const y = mid - (rawBuffer[i] * 0.1); 
+                
+                if(i===0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
             }
             ctx.stroke();
             requestAnimationFrame(draw);
