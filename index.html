@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand Auto-Unlocker</title>
+    <title>MyndBand Shotgun Unlocker</title>
     <style>
         body { font-family: 'Segoe UI', monospace; background: #1e272e; color: #d2dae2; display: flex; flex-direction: column; align-items: center; padding: 20px; }
-        h1 { margin: 0; color: #00d2d3; text-shadow: 0 0 10px rgba(0,210,211,0.5); }
+        h1 { margin: 0; color: #ff9f43; text-shadow: 0 0 10px rgba(255, 159, 67, 0.5); }
         .subtitle { color: #808e9b; font-size: 0.9em; margin-bottom: 20px; }
         
         /* Signal Indicator */
@@ -15,9 +15,9 @@
             margin-bottom: 20px; text-align: center; border: 2px solid #576574;
             transition: all 0.3s ease;
         }
-        .sig-off { background: #ff3f34; color: #fff; box-shadow: 0 0 15px #ff3f34; } /* 200 */
-        .sig-ok  { background: #ffa801; color: #000; } /* 1-199 */
-        .sig-good{ background: #0be881; color: #000; box-shadow: 0 0 15px #0be881; } /* 0 */
+        .sig-off { background: #ff3f34; color: #fff; box-shadow: 0 0 15px #ff3f34; } 
+        .sig-ok  { background: #ffa801; color: #000; } 
+        .sig-good{ background: #0be881; color: #000; box-shadow: 0 0 15px #0be881; } 
 
         button { padding: 15px 50px; font-size: 20px; font-weight: bold; background: #0984e3; color: white; border: none; border-radius: 50px; cursor: pointer; transition: 0.2s; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
         button:hover { transform: scale(1.05); background: #3498db; }
@@ -25,25 +25,26 @@
 
         /* Oscilloscope */
         .scope-container { 
-            background: #000; border: 3px solid #485460; border-radius: 15px; 
+            background: #000; border: 3px solid #ff9f43; border-radius: 15px; 
             width: 100%; max-width: 900px; height: 350px; position: relative; 
             box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
         }
         canvas#rawScope { width: 100%; height: 100%; display: block; }
-        .scope-overlay { position: absolute; top: 10px; left: 15px; color: #00d2d3; font-size: 12px; pointer-events: none; }
+        .scope-overlay { position: absolute; top: 10px; left: 15px; color: #ff9f43; font-size: 12px; pointer-events: none; }
         
         #log { width: 100%; max-width: 900px; height: 150px; background: #000; color: #0f0; padding: 10px; margin-top: 15px; overflow-y: scroll; border: 1px solid #333; font-size: 11px; }
     </style>
 </head>
 <body>
 
-    <h1>🧠 MyndBand Auto-Unlocker</h1>
-    <div class="subtitle">1. Connect -> 2. Fit Headset -> 3. Wait for Green Signal</div>
+    <h1>💥 MyndBand Shotgun Unlocker</h1>
+    <div class="subtitle">Writing 0x02 to ALL Channels (fff4 & fff8)</div>
 
     <div id="sig-box" class="sig-off">SIGNAL: --</div>
     <button id="connectBtn">CONNECT</button>
+    <button id="manualUnlock" style="background:#444; font-size:14px; padding:8px 20px; margin-top:10px;" onclick="forceFire()">Manual Trigger (Fire 0x02)</button>
 
-    <div class="scope-container">
+    <div class="scope-container" style="margin-top: 20px;">
         <div class="scope-overlay">RAW STREAM (512Hz)</div>
         <canvas id="rawScope"></canvas>
     </div>
@@ -58,7 +59,7 @@
         const sigBox = document.getElementById('sig-box');
         const logBox = document.getElementById('log');
         
-        let writeChar = null;
+        let writeChars = []; // Array to hold ALL writable characteristics
         let isRawUnlocked = false;
         let lastSignal = 200;
         let retryInterval = null;
@@ -79,11 +80,11 @@
 
         function draw() {
             const w = canvas.width, h = canvas.height, mid = h/2, scale = h/1500;
-            ctx.fillStyle = "rgba(0,0,0,0.2)"; // Trail effect
+            ctx.fillStyle = "rgba(0,0,0,0.2)";
             ctx.fillRect(0,0,w,h);
             
             ctx.lineWidth = 2; 
-            ctx.strokeStyle = isRawUnlocked ? "#0be881" : "#485460"; // Green if raw, gray if waiting
+            ctx.strokeStyle = isRawUnlocked ? "#ff9f43" : "#485460"; 
             ctx.beginPath();
             
             const step = w/rawBuffer.length;
@@ -108,39 +109,47 @@
                 const server = await device.gatt.connect();
                 log("Connected to GATT Server.");
 
-                let service = null;
-                let readChar = null;
+                // RESET
+                writeChars = [];
 
-                // TRY NATIVE SERVICE (Split Channels)
+                // 1. HARVEST NATIVE CHANNELS
                 try {
-                    service = await server.getPrimaryService(NATIVE_SERVICE);
+                    const service = await server.getPrimaryService(NATIVE_SERVICE);
                     const chars = await service.getCharacteristics();
                     
-                    // FFF4 = Command (Write)
-                    writeChar = chars.find(c => c.uuid.includes("fff4"));
-                    // FFF8 = Data (Notify)
-                    readChar = chars.find(c => c.uuid.includes("fff8"));
-                    
-                    if(!writeChar || !readChar) throw new Error("Missing channels");
-                    log("✅ Found Native Channels (fff4/fff8)");
-                    
-                } catch(e) {
-                    log("⚠️ Native failed, trying HM-10...");
-                    // TRY HM-10 SERVICE (Unified)
-                    service = await server.getPrimaryService(HM10_SERVICE);
-                    const c = await service.getCharacteristic("0000ffe1-0000-1000-8000-00805f9b34fb");
-                    writeChar = c;
-                    readChar = c;
-                    log("✅ Found HM-10 Channel");
-                }
+                    // Add FFF4 (Command)
+                    const c4 = chars.find(c => c.uuid.includes("fff4"));
+                    if(c4) { writeChars.push(c4); log("✅ Target Acquired: fff4"); }
 
-                await readChar.startNotifications();
-                readChar.addEventListener('characteristicvaluechanged', handleData);
-                
+                    // Add FFF8 (Data - sometimes also Write!)
+                    const c8 = chars.find(c => c.uuid.includes("fff8"));
+                    if(c8) { 
+                        writeChars.push(c8); 
+                        log("✅ Target Acquired: fff8"); 
+                        // Start listening on 8
+                        await c8.startNotifications();
+                        c8.addEventListener('characteristicvaluechanged', handleData);
+                    }
+                    
+                } catch(e) { log("⚠️ Native Scan incomplete: " + e.message); }
+
+                // 2. HARVEST HM-10 (If available)
+                try {
+                    const service = await server.getPrimaryService(HM10_SERVICE);
+                    const cE1 = await service.getCharacteristic("0000ffe1-0000-1000-8000-00805f9b34fb");
+                    if(cE1) {
+                        writeChars.push(cE1);
+                        log("✅ Target Acquired: ffe1 (HM-10)");
+                        // Start listening on HM-10 too just in case
+                        await cE1.startNotifications();
+                        cE1.addEventListener('characteristicvaluechanged', handleData);
+                    }
+                } catch(e) { /* ignore */ }
+
+                if(writeChars.length === 0) throw new Error("No writable channels found!");
+
                 btn.disabled = true;
                 btn.innerText = "Connected";
-                
-                // Start the "Unlock Nag" Loop
                 startUnlockLoop();
 
             } catch(e) {
@@ -149,24 +158,38 @@
             }
         });
 
+        // --- THE "SHOTGUN" FIRE FUNCTION ---
+        async function forceFire() {
+            const cmd = new Uint8Array([0x02]);
+            log(`🔥 Firing 0x02 to ${writeChars.length} channels...`);
+            
+            for (const char of writeChars) {
+                try {
+                    const uuidShort = char.uuid.substring(4,8);
+                    if(char.properties.write) await char.writeValueWithResponse(cmd);
+                    else if(char.properties.writeWithoutResponse) await char.writeValueWithoutResponse(cmd);
+                    log(`   -> Sent to ${uuidShort}`);
+                } catch(e) {
+                    log(`   X Failed ${char.uuid.substring(4,8)}: ${e.message}`);
+                }
+            }
+        }
+        window.forceFire = forceFire;
+
         // --- RETRY LOGIC ---
         function startUnlockLoop() {
-            // Attempt to unlock every 2 seconds UNTIL we see raw data
+            // Rapid fire every 500ms
             retryInterval = setInterval(async () => {
-                if (isRawUnlocked) return; // Stop nagging if we have raw data
+                if (isRawUnlocked) return; 
 
                 if (lastSignal === 200) {
-                    log("🚫 Signal 200 (Off Head). Waiting for contact...");
-                    return; // Don't spam commands if off head
+                    log("🚫 Waiting for Signal < 200...");
+                    return; 
                 }
 
-                log("🚀 Sending Unlock (0x02)...");
-                try {
-                    const cmd = new Uint8Array([0x02]);
-                    if(writeChar.properties.write) await writeChar.writeValueWithResponse(cmd);
-                    else await writeChar.writeValueWithoutResponse(cmd);
-                } catch(e) { console.log(e); }
-            }, 2000);
+                await forceFire();
+
+            }, 500); // 500ms interval
         }
 
         // --- PARSER ---
@@ -186,13 +209,11 @@
                 if (b === 0x80) {
                     if(parseBuffer.length < 4) return;
                     if(parseBuffer[1] === 0x02) {
-                        // We are officially receiving raw data!
                         if (!isRawUnlocked) {
                             isRawUnlocked = true;
-                            log("🎉 RAW MODE UNLOCKED! (512Hz Active)");
-                            clearInterval(retryInterval); // Stop the nag loop
+                            log("🎉 RAW MODE UNLOCKED! (Stream Active)");
+                            clearInterval(retryInterval); 
                         }
-                        
                         const val = (parseBuffer[2] << 8) | parseBuffer[3];
                         updateScope(val);
                         parseBuffer.splice(0, 4);
@@ -203,13 +224,11 @@
                 // 2. STANDARD MODE PACKET (Sync AA AA)
                 else if (b === 0xAA) {
                     if(parseBuffer.length >= 2 && parseBuffer[1] === 0xAA) {
-                        if(parseBuffer.length < 4) return; // Wait for len
+                        if(parseBuffer.length < 4) return;
                         const len = parseBuffer[2];
-                        if(parseBuffer.length < 3 + len + 1) return; // Wait for payload
-                        
+                        if(parseBuffer.length < 3 + len + 1) return;
                         const payload = parseBuffer.slice(3, 3+len);
                         parseStandardPayload(payload);
-                        
                         parseBuffer.splice(0, 3 + len + 1);
                         continue;
                     } else {
@@ -220,19 +239,14 @@
                 
                 // 3. MYNDBAND WRAPPER (00 00 EA...)
                 else if (b === 0x00 && parseBuffer.length >= 3 && parseBuffer[2] === 0xEA) {
-                     // 00 00 EA 00 00 02 [SIG]
                      if (parseBuffer.length >= 7) {
                         const sig = parseBuffer[6];
                         updateSignalUI(sig);
-                        // We assume the rest of the packet is there and valid for now
-                        // Just clearing the wrapper prefix to avoid stuck loops
                         parseBuffer.splice(0, 3); 
                      } else return;
                 }
 
-                // 4. Standalone Signal Byte (Sometimes sent by HM-10)
                 else if (b === 0x02 && parseBuffer.length >= 2) {
-                    // Check if next byte looks like signal (0-200)
                     if (parseBuffer[1] <= 200) {
                         updateSignalUI(parseBuffer[1]);
                         parseBuffer.splice(0, 2);
@@ -247,7 +261,6 @@
         }
 
         function parseStandardPayload(payload) {
-            // Find Signal Byte (Code 0x02)
             for(let i=0; i<payload.length; i++) {
                 if (payload[i] === 0x02) {
                     updateSignalUI(payload[i+1]);
@@ -259,17 +272,9 @@
         function updateSignalUI(sig) {
             lastSignal = sig;
             sigBox.innerText = `SIGNAL: ${sig}`;
-            
-            if (sig === 200) {
-                sigBox.className = "sig-off";
-                sigBox.innerText += " (Check Fit)";
-            } else if (sig === 0) {
-                sigBox.className = "sig-good";
-                sigBox.innerText += " (Perfect)";
-            } else {
-                sigBox.className = "sig-ok";
-                sigBox.innerText += " (Noise)";
-            }
+            if (sig === 200) { sigBox.className = "sig-off"; sigBox.innerText += " (Check Fit)"; }
+            else if (sig === 0) { sigBox.className = "sig-good"; sigBox.innerText += " (Perfect)"; }
+            else { sigBox.className = "sig-ok"; sigBox.innerText += " (Noise)"; }
         }
 
         function updateScope(val) {
