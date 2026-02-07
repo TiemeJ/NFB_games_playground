@@ -3,298 +3,211 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V5: Dual-Channel Hunt</title>
+    <title>NeuroScope V6: Aggressive</title>
     <style>
-        :root { --bg: #050505; --card: #151515; --text: #cfcfcf; --accent: #00e5ff; --raw: #ff0055; }
-        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        :root { --bg: #000; --panel: #111; --text: #eee; --accent: #ff0055; --success: #00ff88; }
+        body { font-family: 'Courier New', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        h1 { margin: 0; font-weight: 300; letter-spacing: 2px; color: #fff; }
-        .subtitle { color: #666; font-size: 0.8em; margin-bottom: 20px; }
-        
-        button { padding: 15px 40px; font-size: 16px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 20px; transition: 0.2s; }
-        button:hover { box-shadow: 0 0 20px rgba(0,229,255,0.4); }
-        button:disabled { background: #333; color: #555; cursor: default; box-shadow: none; }
+        h1 { border-bottom: 2px solid var(--accent); padding-bottom: 10px; margin-bottom: 5px; }
+        .sub { color: #666; font-size: 0.8em; margin-bottom: 20px; }
 
-        .dashboard { display: grid; grid-template-columns: 1fr; gap: 15px; width: 100%; max-width: 900px; }
+        button { background: var(--accent); color: white; border: none; padding: 15px 30px; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 20px; }
+        button:hover { filter: brightness(1.2); }
+        button:disabled { background: #333; cursor: default; }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; width: 100%; max-width: 900px; margin-bottom: 20px; }
+        .card { background: var(--panel); border: 1px solid #333; padding: 20px; }
         
-        /* Channel Stats */
-        .channel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px; }
-        .chan-card { background: var(--card); padding: 15px; border-radius: 6px; border-left: 4px solid #333; transition: 0.3s; }
-        .chan-card.active { border-left-color: var(--accent); background: #1a1a1a; }
-        .chan-title { font-size: 0.8em; color: #888; text-transform: uppercase; display: flex; justify-content: space-between; }
-        .chan-val { font-size: 2em; font-weight: bold; color: #fff; margin-top: 5px; }
-        .chan-sub { font-size: 0.7em; color: #555; }
+        .stat-big { font-size: 2.5em; font-weight: bold; margin: 10px 0; }
+        .stat-label { color: #888; font-size: 0.8em; text-transform: uppercase; }
+        .active-a { border-color: var(--accent); box-shadow: 0 0 15px rgba(255, 0, 85, 0.2); }
+        .active-b { border-color: var(--success); box-shadow: 0 0 15px rgba(0, 255, 136, 0.2); }
 
         /* Canvas */
-        .canvas-wrap { width: 100%; height: 350px; background: #000; border: 1px solid #333; border-radius: 4px; position: relative; }
+        .scope-container { width: 100%; max-width: 900px; height: 300px; background: #050505; border: 1px solid #333; position: relative; margin-bottom: 20px; }
         canvas { width: 100%; height: 100%; display: block; }
-        .overlay { position: absolute; top: 10px; right: 10px; font-size: 10px; color: var(--accent); }
-
+        
         /* Log */
-        #log { font-size: 11px; height: 150px; overflow-y: auto; white-space: pre-wrap; color: #0f0; background: #000; padding: 10px; border: 1px solid #333; font-family: 'Courier New', monospace; }
-        .err { color: #ff3333; }
-        .warn { color: #ffcc00; }
+        #log { width: 100%; max-width: 900px; height: 200px; background: #080808; border: 1px solid #333; overflow-y: auto; font-size: 11px; padding: 10px; white-space: pre-wrap; color: #aaa; }
+        .l-ok { color: var(--success); }
+        .l-err { color: #555; }
+        .l-warn { color: #ffaa00; }
     </style>
 </head>
 <body>
 
-    <h1>NEUROSCOPE V5</h1>
-    <div class="subtitle">Multi-Channel Listener • Blind Write Injection</div>
+    <h1>NEUROSCOPE V6</h1>
+    <div class="sub">Aggressive Service Discovery & Blind Injection</div>
 
-    <button id="btnConnect">SCAN & LISTEN TO ALL</button>
+    <button id="btn">AGGRESSIVE SCAN & INJECT</button>
 
-    <div class="dashboard">
-        
-        <div class="channel-grid">
-            <div class="chan-card" id="card-A">
-                <div class="chan-title"><span>Channel A (...fff4)</span> <span style="font-size:10px">NOTIFY</span></div>
-                <div class="chan-val" id="pps-A">0 <span style="font-size:0.5em">pps</span></div>
-                <div class="chan-sub">Potential Raw Stream</div>
-            </div>
-            <div class="chan-card" id="card-B">
-                <div class="chan-title"><span>Channel B (...fff8)</span> <span style="font-size:10px">READ/NOTIFY</span></div>
-                <div class="chan-val" id="pps-B">0 <span style="font-size:0.5em">pps</span></div>
-                <div class="chan-sub">Standard Summary Stream</div>
-            </div>
+    <div class="grid">
+        <div class="card" id="box-a">
+            <div class="stat-label">Channel A (Raw Candidate ...fff4)</div>
+            <div class="stat-big" id="val-a">0</div>
+            <div class="stat-label">Packets / Sec</div>
         </div>
-
-        <div class="canvas-wrap">
-            <div class="overlay" id="graph-source">SOURCE: NONE</div>
-            <canvas id="scope"></canvas>
-        </div>
-
-        <div class="card">
-            <div id="log">> Ready. Click button to scan.</div>
+        <div class="card" id="box-b">
+            <div class="stat-label">Channel B (Summary ...fff8)</div>
+            <div class="stat-big" id="val-b">0</div>
+            <div class="stat-label">Packets / Sec</div>
         </div>
     </div>
 
-    <script>
-        // ════ STATE ════
-        let countA = 0; // fff4
-        let countB = 0; // fff8
-        let activeSource = null; // 'A' or 'B'
-        let rawBuffer = new Array(1024).fill(0);
-        let bufferA = [];
-        let bufferB = [];
+    <div class="scope-container">
+        <canvas id="graph"></canvas>
+    </div>
 
-        // ════ UI ════
-        const cvs = document.getElementById('scope');
-        const ctx = cvs.getContext('2d');
+    <div id="log">Ready. Click button to force connection...</div>
+
+    <script>
+        const btn = document.getElementById('btn');
         const logEl = document.getElementById('log');
+        let countA = 0, countB = 0;
+        let rawData = new Array(512).fill(0);
+        let activeSource = null;
 
         function log(msg, type='') {
             const d = document.createElement('div');
-            d.innerText = "> " + msg;
+            d.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
             if(type) d.classList.add(type);
             logEl.appendChild(d);
             logEl.scrollTop = logEl.scrollHeight;
         }
 
-        function resize() {
-            cvs.width = cvs.parentElement.clientWidth;
-            cvs.height = cvs.parentElement.clientHeight;
-        }
+        // Graph Setup
+        const cvs = document.getElementById('graph');
+        const ctx = cvs.getContext('2d');
+        function resize() { cvs.width = cvs.parentElement.clientWidth; cvs.height = cvs.parentElement.clientHeight; }
         window.addEventListener('resize', resize);
         resize();
 
-        // ════ CONNECT ════
-        document.getElementById('btnConnect').addEventListener('click', async () => {
+        btn.addEventListener('click', async () => {
             try {
-                // 1. SCAN
-                log("Scanning...");
+                // 1. REQUEST DEVICE (Broad Filters)
+                log("Scanning...", 'l-warn');
                 const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    // Ask for everything we've ever seen on these devices
                     optionalServices: [
-                        "0000ffe0-0000-1000-8000-00805f9b34fb", // Serial
                         "039afff0-2c94-11e3-9e06-0002a5d5c51b", // MyndBand
-                        "0000fff0-0000-1000-8000-00805f9b34fb"  // Standard
+                        "0000fff0-0000-1000-8000-00805f9b34fb", // ThinkGear
+                        "0000ffe0-0000-1000-8000-00805f9b34fb"  // Serial
                     ]
                 });
 
                 log(`Connecting to ${device.name}...`);
                 const server = await device.gatt.connect();
-                
-                // 2. FIND SERVICE
-                let service;
-                try {
-                    service = await server.getPrimaryService("039afff0-2c94-11e3-9e06-0002a5d5c51b");
-                    log("Found Service: ...039afff0");
-                } catch(e) {
-                    try {
-                        service = await server.getPrimaryService("0000fff0-0000-1000-8000-00805f9b34fb");
-                        log("Found Service: ...0000fff0");
-                    } catch(err) {
-                        throw new Error("Could not find MyndBand or ThinkGear service.");
-                    }
-                }
+                log("Connected to GATT.", 'l-ok');
 
-                // 3. LISTEN TO EVERYTHING
-                const chars = await service.getCharacteristics();
-                log(`Found ${chars.length} characteristics.`);
+                // 2. GET ALL SERVICES (Avoids "Not Found" error by enumerating)
+                const services = await server.getPrimaryServices();
+                log(`Found ${services.length} Services.`, 'l-ok');
 
-                for (const c of chars) {
-                    const uuid = c.uuid.substring(4,8); // Short UUID
+                for (const service of services) {
+                    log(`Service: ${service.uuid}`);
+                    const chars = await service.getCharacteristics();
                     
-                    // Attempt "Blind Write" (Unlock Command)
-                    // Even if it doesn't say "Write", we try. 
-                    // Many Chinese BLE chips misreport properties.
-                    try {
-                        const cmd = new Uint8Array([0x02]); // Raw Mode Command
-                        // Try writeValue first, fallback to writeValueWithoutResponse
-                        if (c.properties.write) await c.writeValue(cmd);
-                        else if (c.properties.writeWithoutResponse) await c.writeValueWithoutResponse(cmd);
-                        log(`Sent CMD 0x02 to ...${uuid}`, 'warn');
-                    } catch(e) {
-                        // Expected failure on Read-Only channels
-                    }
+                    for (const c of chars) {
+                        const uuid = c.uuid.substring(4,8);
+                        log(`  > Char: ...${uuid} Props: ${getProps(c)}`);
 
-                    // Subscribe
-                    if (c.properties.notify) {
-                        await c.startNotifications();
-                        if (uuid.includes("fff4")) {
-                            log(`Listening to Channel A (...fff4)`);
-                            c.addEventListener('characteristicvaluechanged', (e) => handleData(e, 'A'));
-                        } else if (uuid.includes("fff8")) {
-                            log(`Listening to Channel B (...fff8)`);
-                            c.addEventListener('characteristicvaluechanged', (e) => handleData(e, 'B'));
-                        } else {
-                            log(`Listening to Unknown (...${uuid})`);
-                            c.addEventListener('characteristicvaluechanged', (e) => handleData(e, '?'));
+                        // 3. BLIND WRITE BARRAGE
+                        // Attempt to write 0x02 (Raw Mode) to EVERYTHING
+                        const cmd = new Uint8Array([0x02]);
+                        
+                        // Try standard Write
+                        if (c.properties.write) {
+                            c.writeValue(cmd).then(() => log(`    [WRITE] Sent to ...${uuid}`, 'l-ok')).catch(e => log(`    [WRITE] Fail: ${e}`, 'l-err'));
+                        }
+                        // Try "Write Without Response" (Even if not advertised, we try!)
+                        try {
+                            await c.writeValueWithoutResponse(cmd);
+                            log(`    [BLIND] Sent 0x02 to ...${uuid}!`, 'l-ok');
+                        } catch(e) {
+                            // Expected fail for Read-only
+                        }
+
+                        // 4. SUBSCRIBE
+                        if (c.properties.notify) {
+                            await c.startNotifications();
+                            if (uuid.includes("fff4")) {
+                                log(`    [LISTEN] Attached to Channel A (...fff4)`, 'l-ok');
+                                c.addEventListener('characteristicvaluechanged', (e) => handle(e, 'A'));
+                            } else if (uuid.includes("fff8")) {
+                                log(`    [LISTEN] Attached to Channel B (...fff8)`, 'l-ok');
+                                c.addEventListener('characteristicvaluechanged', (e) => handle(e, 'B'));
+                            }
                         }
                     }
                 }
 
-                document.getElementById('btnConnect').disabled = true;
-                log("Systems active. Watching for data flood...");
-                
-                // Stats Loop
-                setInterval(updateStats, 1000);
+                btn.disabled = true;
+                btn.innerText = "RUNNING...";
                 requestAnimationFrame(draw);
+                setInterval(updateStats, 1000);
 
-            } catch(e) {
-                log("ERROR: " + e.message, 'err');
+            } catch (e) {
+                log("FATAL: " + e.message, 'l-err');
             }
         });
 
-        // ════ HANDLING ════
-        function handleData(event, source) {
+        function getProps(c) {
+            let p = [];
+            if(c.properties.read) p.push("R");
+            if(c.properties.write) p.push("W");
+            if(c.properties.notify) p.push("N");
+            return p.join(',');
+        }
+
+        function handle(event, source) {
             const data = new Uint8Array(event.target.value.buffer);
             
-            // 1. Update Counters
-            if (source === 'A') countA++;
-            if (source === 'B') countB++;
+            if(source === 'A') countA++;
+            if(source === 'B') countB++;
 
-            // 2. Select Buffer
-            // We use a specific buffer for each channel to avoid mixing streams
-            let buf = (source === 'A') ? bufferA : bufferB;
+            // If we get high speed data on A, switch source
+            if(source === 'A' && activeSource !== 'A') {
+                activeSource = 'A';
+                document.getElementById('box-a').classList.add('active-a');
+                document.getElementById('box-b').classList.remove('active-b');
+                log("!!! RAW DATA DETECTED ON CHANNEL A !!!", 'l-ok');
+            }
 
-            // 3. Push Bytes
-            for(let i=0; i<data.length; i++) buf.push(data[i]);
-            if(buf.length > 2048) buf.splice(0, 1024);
-
-            // 4. Parse
-            parseBuffer(buf, source);
-        }
-
-        function parseBuffer(buf, source) {
-            while (buf.length >= 3) {
-                // Sync Check: [AA] [AA]
-                if (buf[0] === 0xAA && buf[1] === 0xAA) {
-                    const len = buf[2];
-                    if (buf.length >= 3 + len + 1) {
-                        const payload = buf.slice(3, 3 + len);
-                        const checksum = buf[3 + len];
-                        
-                        let sum = 0;
-                        for (let b of payload) sum += b;
-                        sum = (~sum) & 0xFF;
-
-                        if (sum === checksum) {
-                            parsePayload(payload, source);
-                            buf.splice(0, 3 + len + 1);
-                        } else {
-                            buf.shift(); // Bad sum
-                        }
-                    } else { return; } // Wait for bytes
-                } else {
-                    buf.shift(); // Not sync
+            // Simple Parse for Graph
+            // We just look for raw packets roughly
+            for(let i=0; i<data.length-1; i++) {
+                // If we see 0x80 ... likely raw
+                if(data[i] === 0x80 && (i+3 < data.length)) {
+                    // Try to extract
+                    let val = (data[i+2] << 8) | data[i+3];
+                    if(val >= 32768) val -= 65536;
+                    rawData.push(val);
+                    rawData.shift();
+                    i+=3;
                 }
             }
         }
 
-        function parsePayload(payload, source) {
-            let i = 0;
-            while (i < payload.length) {
-                const code = payload[i];
-                
-                // 0x80 = RAW WAVE
-                if (code === 0x80) {
-                    // Packet Found!
-                    // Determine which channel is giving us the goods
-                    if (source !== activeSource) {
-                        activeSource = source;
-                        document.getElementById('graph-source').innerText = `SOURCE: CHANNEL ${source}`;
-                        // Highlight UI
-                        document.getElementById('card-A').classList.toggle('active', source==='A');
-                        document.getElementById('card-B').classList.toggle('active', source==='B');
-                    }
-
-                    // Extract Value
-                    const len = payload[i+1]; // Usually 2
-                    const val = (payload[i+2] << 8) | payload[i+3];
-                    let raw = val;
-                    if (raw >= 32768) raw -= 65536;
-
-                    // Push to Graph Buffer
-                    rawBuffer.push(raw);
-                    rawBuffer.shift();
-                    
-                    i += 4; 
-                } else {
-                    // Skip other codes (Signal, Att, etc)
-                    // We only care about raw wave for the graph
-                    // Heuristic skip: usually code + 1 byte value
-                    // But some are longer. NeuroSky parser is complex.
-                    // Simple hack: increment 1 and let next loop sync handle errors
-                    i++; 
-                }
-            }
-        }
-
-        // ════ UI UPDATES ════
         function updateStats() {
-            const elA = document.getElementById('pps-A');
-            const elB = document.getElementById('pps-B');
-
-            elA.innerText = countA;
-            elB.innerText = countB;
-
-            // Color Logic
-            elA.style.color = countA > 100 ? '#0f0' : '#555';
-            elB.style.color = countB > 100 ? '#0f0' : '#555';
-
-            countA = 0;
-            countB = 0;
+            document.getElementById('val-a').innerText = countA;
+            document.getElementById('val-b').innerText = countB;
+            countA = 0; countB = 0;
         }
 
         function draw() {
-            ctx.fillStyle = "#000";
+            ctx.fillStyle = "black";
             ctx.fillRect(0,0, cvs.width, cvs.height);
-            
-            ctx.strokeStyle = activeSource ? "#00e5ff" : "#333";
-            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = activeSource === 'A' ? "#ff0055" : (activeSource === 'B' ? "#00ff88" : "#333");
+            ctx.lineWidth = 2;
             ctx.beginPath();
-
-            const w = cvs.width;
-            const h = cvs.height;
-            const step = w / rawBuffer.length;
-
-            for(let i=0; i<rawBuffer.length; i++) {
-                const x = i*step;
-                const y = (h/2) - (rawBuffer[i] * 0.15);
-                if (i===0) ctx.moveTo(x,y);
-                else ctx.lineTo(x,y);
+            
+            let step = cvs.width / rawData.length;
+            let mid = cvs.height / 2;
+            
+            for(let i=0; i<rawData.length; i++) {
+                let y = mid - (rawData[i] * 0.15);
+                if(i===0) ctx.moveTo(i*step, y);
+                else ctx.lineTo(i*step, y);
             }
             ctx.stroke();
             requestAnimationFrame(draw);
