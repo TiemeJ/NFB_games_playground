@@ -3,334 +3,298 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V4: Deep Serial</title>
+    <title>NeuroScope V5: Dual-Channel Hunt</title>
     <style>
-        :root { --bg: #000000; --card: #141414; --text: #d0d0d0; --accent: #00ff88; --err: #ff4444; }
-        body { font-family: 'Consolas', monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; }
+        :root { --bg: #050505; --card: #151515; --text: #cfcfcf; --accent: #00e5ff; --raw: #ff0055; }
+        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; }
         
-        h1 { margin: 0; color: #fff; letter-spacing: 2px; border-bottom: 2px solid var(--accent); padding-bottom: 5px; }
-        .subtitle { color: #888; font-size: 0.8em; margin-bottom: 20px; margin-top: 5px; }
+        h1 { margin: 0; font-weight: 300; letter-spacing: 2px; color: #fff; }
+        .subtitle { color: #666; font-size: 0.8em; margin-bottom: 20px; }
         
-        button { padding: 15px 30px; font-size: 16px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 20px; }
-        button:hover { box-shadow: 0 0 15px var(--accent); }
-        button:disabled { background: #333; color: #555; box-shadow: none; cursor: default; }
+        button { padding: 15px 40px; font-size: 16px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 20px; transition: 0.2s; }
+        button:hover { box-shadow: 0 0 20px rgba(0,229,255,0.4); }
+        button:disabled { background: #333; color: #555; cursor: default; box-shadow: none; }
 
         .dashboard { display: grid; grid-template-columns: 1fr; gap: 15px; width: 100%; max-width: 900px; }
-        .card { background: var(--card); padding: 15px; border: 1px solid #333; border-radius: 6px; }
-
-        /* Stats Grid */
-        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
-        .stat-box { background: #1a1a1a; padding: 10px; text-align: center; border: 1px solid #333; }
-        .stat-val { font-size: 1.5em; font-weight: bold; color: #fff; }
-        .stat-lbl { font-size: 0.7em; color: var(--accent); text-transform: uppercase; }
+        
+        /* Channel Stats */
+        .channel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 10px; }
+        .chan-card { background: var(--card); padding: 15px; border-radius: 6px; border-left: 4px solid #333; transition: 0.3s; }
+        .chan-card.active { border-left-color: var(--accent); background: #1a1a1a; }
+        .chan-title { font-size: 0.8em; color: #888; text-transform: uppercase; display: flex; justify-content: space-between; }
+        .chan-val { font-size: 2em; font-weight: bold; color: #fff; margin-top: 5px; }
+        .chan-sub { font-size: 0.7em; color: #555; }
 
         /* Canvas */
-        .canvas-wrap { width: 100%; height: 300px; background: #050505; border: 1px solid #333; position: relative; }
+        .canvas-wrap { width: 100%; height: 350px; background: #000; border: 1px solid #333; border-radius: 4px; position: relative; }
         canvas { width: 100%; height: 100%; display: block; }
+        .overlay { position: absolute; top: 10px; right: 10px; font-size: 10px; color: var(--accent); }
 
         /* Log */
-        #log { font-size: 11px; height: 200px; overflow-y: auto; white-space: pre-wrap; color: #aaa; background: #111; padding: 10px; border: 1px solid #333; }
-        .l-inf { color: #fff; }
-        .l-suc { color: var(--accent); }
-        .l-err { color: var(--err); }
-        .l-wrn { color: #ffbb00; }
+        #log { font-size: 11px; height: 150px; overflow-y: auto; white-space: pre-wrap; color: #0f0; background: #000; padding: 10px; border: 1px solid #333; font-family: 'Courier New', monospace; }
+        .err { color: #ff3333; }
+        .warn { color: #ffcc00; }
     </style>
 </head>
 <body>
 
-    <h1>NEUROSCOPE V4</h1>
-    <div class="subtitle">Serial/UART Override Mode</div>
+    <h1>NEUROSCOPE V5</h1>
+    <div class="subtitle">Multi-Channel Listener • Blind Write Injection</div>
 
-    <button id="btnConnect">DEEP SCAN & CONNECT</button>
+    <button id="btnConnect">SCAN & LISTEN TO ALL</button>
 
     <div class="dashboard">
-        <div class="stats">
-            <div class="stat-box">
-                <div class="stat-lbl">Speed</div>
-                <div class="stat-val" id="v-pps">0 pps</div>
+        
+        <div class="channel-grid">
+            <div class="chan-card" id="card-A">
+                <div class="chan-title"><span>Channel A (...fff4)</span> <span style="font-size:10px">NOTIFY</span></div>
+                <div class="chan-val" id="pps-A">0 <span style="font-size:0.5em">pps</span></div>
+                <div class="chan-sub">Potential Raw Stream</div>
             </div>
-            <div class="stat-box">
-                <div class="stat-lbl">Signal</div>
-                <div class="stat-val" id="v-sig">--</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-lbl">Att / Med</div>
-                <div class="stat-val"><span id="v-att">--</span> / <span id="v-med">--</span></div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-lbl">Mode</div>
-                <div class="stat-val" id="v-mode" style="font-size:0.8em; line-height:2.5;">WAITING</div>
+            <div class="chan-card" id="card-B">
+                <div class="chan-title"><span>Channel B (...fff8)</span> <span style="font-size:10px">READ/NOTIFY</span></div>
+                <div class="chan-val" id="pps-B">0 <span style="font-size:0.5em">pps</span></div>
+                <div class="chan-sub">Standard Summary Stream</div>
             </div>
         </div>
 
-        <div class="card">
-            <div class="canvas-wrap"><canvas id="scope"></canvas></div>
+        <div class="canvas-wrap">
+            <div class="overlay" id="graph-source">SOURCE: NONE</div>
+            <canvas id="scope"></canvas>
         </div>
 
         <div class="card">
-            <div style="font-size:10px; color:#666; margin-bottom:5px;">SYSTEM LOG</div>
-            <div id="log">Ready to scan...</div>
+            <div id="log">> Ready. Click button to scan.</div>
         </div>
     </div>
 
     <script>
-        // ════ CONFIG ════
-        // We look for these services in order of preference
-        // 1. HM-10 / Serial (Common on older NeuroSky bridges)
-        const UUID_SERIAL = "0000ffe0-0000-1000-8000-00805f9b34fb"; 
-        // 2. MyndBand / ThinkGear (What you connected to before)
-        const UUID_TG     = "039afff0-2c94-11e3-9e06-0002a5d5c51b"; 
-
         // ════ STATE ════
-        let device, server;
-        let dataChar, writeChar;
-        let packetCount = 0;
-        let buffer = [];
+        let countA = 0; // fff4
+        let countB = 0; // fff8
+        let activeSource = null; // 'A' or 'B'
         let rawBuffer = new Array(1024).fill(0);
-        
+        let bufferA = [];
+        let bufferB = [];
+
         // ════ UI ════
-        const canvas = document.getElementById('scope');
-        const ctx = canvas.getContext('2d');
+        const cvs = document.getElementById('scope');
+        const ctx = cvs.getContext('2d');
         const logEl = document.getElementById('log');
 
-        function log(msg, cls='') {
+        function log(msg, type='') {
             const d = document.createElement('div');
             d.innerText = "> " + msg;
-            if(cls) d.classList.add(cls);
+            if(type) d.classList.add(type);
             logEl.appendChild(d);
             logEl.scrollTop = logEl.scrollHeight;
         }
 
         function resize() {
-            canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = canvas.parentElement.clientHeight;
+            cvs.width = cvs.parentElement.clientWidth;
+            cvs.height = cvs.parentElement.clientHeight;
         }
         window.addEventListener('resize', resize);
         resize();
 
-        // ════ CORE ════
+        // ════ CONNECT ════
         document.getElementById('btnConnect').addEventListener('click', async () => {
             try {
-                log("Requesting Device (All Services)...", 'l-inf');
-                
-                device = await navigator.bluetooth.requestDevice({
+                // 1. SCAN
+                log("Scanning...");
+                const device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    // IMPORTANT: We must ask for permission to access ALL likely services
-                    optionalServices: [UUID_SERIAL, UUID_TG]
+                    // Ask for everything we've ever seen on these devices
+                    optionalServices: [
+                        "0000ffe0-0000-1000-8000-00805f9b34fb", // Serial
+                        "039afff0-2c94-11e3-9e06-0002a5d5c51b", // MyndBand
+                        "0000fff0-0000-1000-8000-00805f9b34fb"  // Standard
+                    ]
                 });
 
                 log(`Connecting to ${device.name}...`);
-                server = await device.gatt.connect();
-                log("Connected.", 'l-suc');
-
-                // ─── STRATEGY 1: HUNT FOR SERIAL (FFE0) ───
-                let service = null;
-                let mode = "";
-
+                const server = await device.gatt.connect();
+                
+                // 2. FIND SERVICE
+                let service;
                 try {
-                    log("Attempting UART/Serial (FFE0)...", 'l-wrn');
-                    service = await server.getPrimaryService(UUID_SERIAL);
-                    mode = "SERIAL";
-                    log("Serial Service FOUND!", 'l-suc');
+                    service = await server.getPrimaryService("039afff0-2c94-11e3-9e06-0002a5d5c51b");
+                    log("Found Service: ...039afff0");
                 } catch(e) {
-                    log("Serial Service not found.", 'l-inf');
-                }
-
-                // ─── STRATEGY 2: FALLBACK TO THINKGEAR (FFF0) ───
-                if (!service) {
                     try {
-                        log("Falling back to ThinkGear (FFF0)...", 'l-wrn');
-                        service = await server.getPrimaryService(UUID_TG);
-                        mode = "THINKGEAR";
-                        log("ThinkGear Service FOUND!", 'l-suc');
-                    } catch(e) {
-                        throw new Error("No compatible service found!");
+                        service = await server.getPrimaryService("0000fff0-0000-1000-8000-00805f9b34fb");
+                        log("Found Service: ...0000fff0");
+                    } catch(err) {
+                        throw new Error("Could not find MyndBand or ThinkGear service.");
                     }
                 }
 
-                document.getElementById('v-mode').innerText = mode;
-
-                // ─── CHARACTERISTIC DISCOVERY ───
-                log("Scanning Characteristics...", 'l-inf');
+                // 3. LISTEN TO EVERYTHING
                 const chars = await service.getCharacteristics();
-                
-                // Reset
-                dataChar = null;
-                writeChar = null;
+                log(`Found ${chars.length} characteristics.`);
 
                 for (const c of chars) {
-                    const u = c.uuid.substring(4, 8); // Short UUID
-                    const p = [];
-                    if(c.properties.read) p.push("R");
-                    if(c.properties.write) p.push("W");
-                    if(c.properties.writeWithoutResponse) p.push("WnR");
-                    if(c.properties.notify) p.push("N");
+                    const uuid = c.uuid.substring(4,8); // Short UUID
                     
-                    log(`UUID: ...${u} [${p.join(',')}]`);
+                    // Attempt "Blind Write" (Unlock Command)
+                    // Even if it doesn't say "Write", we try. 
+                    // Many Chinese BLE chips misreport properties.
+                    try {
+                        const cmd = new Uint8Array([0x02]); // Raw Mode Command
+                        // Try writeValue first, fallback to writeValueWithoutResponse
+                        if (c.properties.write) await c.writeValue(cmd);
+                        else if (c.properties.writeWithoutResponse) await c.writeValueWithoutResponse(cmd);
+                        log(`Sent CMD 0x02 to ...${uuid}`, 'warn');
+                    } catch(e) {
+                        // Expected failure on Read-Only channels
+                    }
 
-                    // 1. Find Data Channel (Notify)
-                    // If FFF0 service: Prefer FFF8 over FFF4
-                    // If FFE0 service: Prefer FFE1
+                    // Subscribe
                     if (c.properties.notify) {
-                        if (mode === "THINKGEAR") {
-                            if (u.includes("fff8")) dataChar = c; // PRIORITY
-                            else if (!dataChar) dataChar = c; // Fallback
+                        await c.startNotifications();
+                        if (uuid.includes("fff4")) {
+                            log(`Listening to Channel A (...fff4)`);
+                            c.addEventListener('characteristicvaluechanged', (e) => handleData(e, 'A'));
+                        } else if (uuid.includes("fff8")) {
+                            log(`Listening to Channel B (...fff8)`);
+                            c.addEventListener('characteristicvaluechanged', (e) => handleData(e, 'B'));
                         } else {
-                            dataChar = c; // Serial usually only has one
+                            log(`Listening to Unknown (...${uuid})`);
+                            c.addEventListener('characteristicvaluechanged', (e) => handleData(e, '?'));
                         }
                     }
-
-                    // 2. Find Write Channel
-                    if (c.properties.write || c.properties.writeWithoutResponse) {
-                        writeChar = c;
-                    }
                 }
 
-                if (!dataChar) throw new Error("No Data Channel (Notify) found!");
-                
-                log(`Selected Data: ...${dataChar.uuid.substring(4,8)}`, 'l-suc');
-                if (writeChar) log(`Selected Write: ...${writeChar.uuid.substring(4,8)}`, 'l-suc');
-                else log("WARNING: No Write Channel found (Read Only)", 'l-err');
-
-                // ─── CONNECT STREAM ───
-                await dataChar.startNotifications();
-                dataChar.addEventListener('characteristicvaluechanged', handleData);
-                log("Stream Started.", 'l-suc');
                 document.getElementById('btnConnect').disabled = true;
+                log("Systems active. Watching for data flood...");
+                
+                // Stats Loop
+                setInterval(updateStats, 1000);
+                requestAnimationFrame(draw);
 
-                // ─── ATTEMPT UNLOCK ───
-                if (writeChar) {
-                    // Try to force raw mode
-                    log("Sending Unlock Commands...", 'l-wrn');
-                    
-                    // Command Sequence for various chips:
-                    // 1. 0x02 (NeuroSky standard "Raw Mode")
-                    // 2. 0x00 (Dump/Stream)
-                    // 3. String "c" (Some serial bridges)
-                    
-                    try {
-                        const cmd1 = new Uint8Array([0x02]); 
-                        await writeChar.writeValue(cmd1);
-                        log("Sent CMD: 0x02", 'l-inf');
-                    } catch(e) { log("CMD 0x02 Failed", 'l-err'); }
-
-                } else {
-                    log("Cannot send commands (Read Only). Hoping for default stream...", 'l-wrn');
-                }
-
-                // Start Visuals
-                draw();
-                setInterval(() => {
-                    document.getElementById('v-pps').innerText = packetCount + " pps";
-                    // Color code PPS
-                    const s = document.getElementById('v-pps').style;
-                    s.color = packetCount > 100 ? "#0f0" : (packetCount > 0 ? "#fa0" : "#555");
-                    packetCount = 0;
-                }, 1000);
-
-            } catch (e) {
-                log("FATAL: " + e.message, 'l-err');
+            } catch(e) {
+                log("ERROR: " + e.message, 'err');
             }
         });
 
-        // ════ PARSER ════
-        function handleData(event) {
+        // ════ HANDLING ════
+        function handleData(event, source) {
             const data = new Uint8Array(event.target.value.buffer);
-            packetCount++;
-
-            for (let i=0; i<data.length; i++) buffer.push(data[i]);
             
-            // Limit buffer
-            if (buffer.length > 2048) buffer.splice(0, 1024);
+            // 1. Update Counters
+            if (source === 'A') countA++;
+            if (source === 'B') countB++;
 
-            processBuffer();
+            // 2. Select Buffer
+            // We use a specific buffer for each channel to avoid mixing streams
+            let buf = (source === 'A') ? bufferA : bufferB;
+
+            // 3. Push Bytes
+            for(let i=0; i<data.length; i++) buf.push(data[i]);
+            if(buf.length > 2048) buf.splice(0, 1024);
+
+            // 4. Parse
+            parseBuffer(buf, source);
         }
 
-        function processBuffer() {
-            while (buffer.length >= 3) {
-                // Check for Sync [AA] [AA]
-                if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
-                    const len = buffer[2];
-                    if (buffer.length >= 3 + len + 1) {
-                        const payload = buffer.slice(3, 3 + len);
-                        const checksum = buffer[3 + len];
+        function parseBuffer(buf, source) {
+            while (buf.length >= 3) {
+                // Sync Check: [AA] [AA]
+                if (buf[0] === 0xAA && buf[1] === 0xAA) {
+                    const len = buf[2];
+                    if (buf.length >= 3 + len + 1) {
+                        const payload = buf.slice(3, 3 + len);
+                        const checksum = buf[3 + len];
                         
-                        // Checksum Calc
                         let sum = 0;
                         for (let b of payload) sum += b;
                         sum = (~sum) & 0xFF;
 
                         if (sum === checksum) {
-                            parsePayload(payload);
-                            buffer.splice(0, 3 + len + 1);
+                            parsePayload(payload, source);
+                            buf.splice(0, 3 + len + 1);
                         } else {
-                            buffer.shift(); // Bad checksum
+                            buf.shift(); // Bad sum
                         }
-                    } else { return; } // Need more bytes
+                    } else { return; } // Wait for bytes
                 } else {
-                    buffer.shift(); // Not sync
+                    buf.shift(); // Not sync
                 }
             }
         }
 
-        function parsePayload(payload) {
+        function parsePayload(payload, source) {
             let i = 0;
             while (i < payload.length) {
                 const code = payload[i];
                 
-                if (code === 0x80) { // RAW WAVE
-                    const val = (payload[i+1] << 8) | payload[i+2];
+                // 0x80 = RAW WAVE
+                if (code === 0x80) {
+                    // Packet Found!
+                    // Determine which channel is giving us the goods
+                    if (source !== activeSource) {
+                        activeSource = source;
+                        document.getElementById('graph-source').innerText = `SOURCE: CHANNEL ${source}`;
+                        // Highlight UI
+                        document.getElementById('card-A').classList.toggle('active', source==='A');
+                        document.getElementById('card-B').classList.toggle('active', source==='B');
+                    }
+
+                    // Extract Value
+                    const len = payload[i+1]; // Usually 2
+                    const val = (payload[i+2] << 8) | payload[i+3];
                     let raw = val;
                     if (raw >= 32768) raw -= 65536;
-                    
+
+                    // Push to Graph Buffer
                     rawBuffer.push(raw);
                     rawBuffer.shift();
-                    i += 4; // 1(code) + 1(len) + 2(val) -- WAIT. ThinkGear spec says 0x80 [LEN] [VAL_H] [VAL_L]
-                    // Wait, standard spec:
-                    // [0x80] [0x02] [High] [Low]
-                    // My previous code assumed strict format. Let's verify Length byte.
-                } 
-                else if (code === 0x02) { // Signal
-                    const q = payload[i+1];
-                    document.getElementById('v-sig').innerText = q === 0 ? "GOOD" : (q===200?"OFF":q);
-                    document.getElementById('v-sig').style.color = q===0 ? "#0f0" : "#f00";
-                    i += 2;
-                }
-                else if (code === 0x04) { // Att
-                    document.getElementById('v-att').innerText = payload[i+1];
-                    i += 2;
-                }
-                else if (code === 0x05) { // Med
-                    document.getElementById('v-med').innerText = payload[i+1];
-                    i += 2;
-                }
-                else {
-                    i++;
+                    
+                    i += 4; 
+                } else {
+                    // Skip other codes (Signal, Att, etc)
+                    // We only care about raw wave for the graph
+                    // Heuristic skip: usually code + 1 byte value
+                    // But some are longer. NeuroSky parser is complex.
+                    // Simple hack: increment 1 and let next loop sync handle errors
+                    i++; 
                 }
             }
         }
 
-        // ════ RENDER ════
+        // ════ UI UPDATES ════
+        function updateStats() {
+            const elA = document.getElementById('pps-A');
+            const elB = document.getElementById('pps-B');
+
+            elA.innerText = countA;
+            elB.innerText = countB;
+
+            // Color Logic
+            elA.style.color = countA > 100 ? '#0f0' : '#555';
+            elB.style.color = countB > 100 ? '#0f0' : '#555';
+
+            countA = 0;
+            countB = 0;
+        }
+
         function draw() {
             ctx.fillStyle = "#000";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillRect(0,0, cvs.width, cvs.height);
             
-            ctx.strokeStyle = "#00ff88";
+            ctx.strokeStyle = activeSource ? "#00e5ff" : "#333";
             ctx.lineWidth = 1.5;
             ctx.beginPath();
 
-            const h = canvas.height;
-            const w = canvas.width;
-            const mid = h / 2;
-            const len = rawBuffer.length;
-            const step = w / len;
+            const w = cvs.width;
+            const h = cvs.height;
+            const step = w / rawBuffer.length;
 
-            for(let i=0; i<len; i++) {
-                const x = i * step;
-                // Scale factor: +/- 2048 -> +/- h/2
-                const y = mid - (rawBuffer[i] * (h/1000)); // Zoom
-                if(i===0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+            for(let i=0; i<rawBuffer.length; i++) {
+                const x = i*step;
+                const y = (h/2) - (rawBuffer[i] * 0.15);
+                if (i===0) ctx.moveTo(x,y);
+                else ctx.lineTo(x,y);
             }
             ctx.stroke();
             requestAnimationFrame(draw);
