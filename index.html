@@ -5,72 +5,125 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NeuroScope V8: Targeted Unlock</title>
     <style>
-        :root { --bg: #111; --text: #eee; --accent: #00ff00; --err: #ff3333; }
-        body { font-family: monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        h1 { color: #fff; border-bottom: 2px solid var(--accent); }
-        button { padding: 15px 30px; font-size: 1.2em; background: var(--accent); color: #000; border: none; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
-        button:disabled { background: #555; cursor: default; }
-        canvas { width: 100%; max-width: 800px; height: 300px; background: #000; border: 1px solid #333; }
-        #log { width: 100%; max-width: 800px; height: 200px; overflow-y: scroll; border: 1px solid #333; padding: 10px; margin-top: 10px; color: #aaa; white-space: pre-wrap; }
-        .success { color: var(--accent); }
-        .error { color: var(--err); }
+        :root { --bg: #0d0d0d; --panel: #1a1a1a; --text: #e0e0e0; --accent: #00ff9d; --err: #ff4d4d; }
+        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        
+        h1 { margin: 0; color: #fff; border-bottom: 2px solid var(--accent); padding-bottom: 10px; letter-spacing: 2px; }
+        .subtitle { margin-top: 10px; color: #888; font-size: 0.9em; margin-bottom: 30px; }
+        
+        button { padding: 15px 40px; font-size: 16px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
+        button:hover { box-shadow: 0 0 20px rgba(0, 255, 157, 0.4); transform: scale(1.05); }
+        button:disabled { background: #333; color: #555; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        .dashboard { width: 100%; max-width: 900px; display: grid; gap: 20px; }
+        
+        /* Stats */
+        .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; }
+        .stat-card { background: var(--panel); padding: 15px; border-radius: 8px; border: 1px solid #333; text-align: center; }
+        .stat-val { font-size: 2em; font-weight: bold; color: #fff; margin-bottom: 5px; }
+        .stat-lbl { font-size: 0.75em; color: var(--accent); text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Canvas */
+        .scope-container { height: 350px; background: #000; border: 1px solid #333; border-radius: 8px; position: relative; overflow: hidden; }
+        canvas { width: 100%; height: 100%; display: block; }
+        .scan-line { position: absolute; top: 0; right: 0; width: 2px; height: 100%; background: var(--accent); box-shadow: 0 0 10px var(--accent); opacity: 0.5; }
+
+        /* Log */
+        #log { height: 150px; background: #050505; border: 1px solid #333; padding: 15px; overflow-y: auto; font-size: 11px; white-space: pre-wrap; font-family: 'Courier New', monospace; color: #888; border-radius: 8px; }
+        .l-ok { color: var(--accent); }
+        .l-err { color: var(--err); }
+        .l-warn { color: #ffbb00; }
     </style>
 </head>
 <body>
 
     <h1>NEUROSCOPE V8</h1>
-    <div style="color: #888; margin-bottom: 20px;">Target: Service FFE0 / Char FFE1 / Cmd 0x02</div>
+    <div class="subtitle">Target: Service FFE0 (Serial) • Command 0x02</div>
 
-    <button id="btn">EXECUTE UNLOCK SEQUENCE</button>
-    <canvas id="graph"></canvas>
-    <div id="log">Ready.</div>
+    <button id="btnConnect">EXECUTE UNLOCK SEQUENCE</button>
+
+    <div class="dashboard">
+        <div class="stats-row">
+            <div class="stat-card">
+                <div class="stat-val" id="val-pps">0</div>
+                <div class="stat-lbl">Packets / Sec</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val" id="val-sig">--</div>
+                <div class="stat-lbl">Signal Quality</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-val"><span id="val-att">--</span> / <span id="val-med">--</span></div>
+                <div class="stat-lbl">Att / Med</div>
+            </div>
+        </div>
+
+        <div class="scope-container">
+            <canvas id="scope"></canvas>
+            </div>
+
+        <div id="log">Ready. Click button to connect...</div>
+    </div>
 
     <script>
-        const UUID_SERIAL_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb";
-        const UUID_SERIAL_CHAR    = "0000ffe1-0000-1000-8000-00805f9b34fb";
-        
-        // Also keep MyndBand UUIDs just in case data comes there
-        const UUID_MYND_SERVICE   = "039afff0-2c94-11e3-9e06-0002a5d5c51b";
-        
-        const btn = document.getElementById('btn');
-        const logEl = document.getElementById('log');
-        const cvs = document.getElementById('graph');
-        const ctx = cvs.getContext('2d');
-        
-        let rawBuffer = new Array(512).fill(0);
+        // ════ CONFIGURATION ════
+        const UUIDS = {
+            SERIAL_SERVICE: "0000ffe0-0000-1000-8000-00805f9b34fb",
+            SERIAL_CHAR:    "0000ffe1-0000-1000-8000-00805f9b34fb",
+            MYND_SERVICE:   "039afff0-2c94-11e3-9e06-0002a5d5c51b" 
+        };
 
-        function log(msg, cls="") {
+        // ════ STATE ════
+        let device, server;
+        let rawBuffer = new Array(512).fill(0);
+        let packetCount = 0;
+
+        // ════ UI HANDLERS ════
+        const btn = document.getElementById('btnConnect');
+        const logEl = document.getElementById('log');
+        const cvs = document.getElementById('scope');
+        const ctx = cvs.getContext('2d');
+
+        function log(msg, cls='') {
             const d = document.createElement('div');
-            d.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            d.innerText = `> ${msg}`;
             if(cls) d.classList.add(cls);
             logEl.appendChild(d);
             logEl.scrollTop = logEl.scrollHeight;
         }
 
+        function resize() {
+            cvs.width = cvs.parentElement.clientWidth;
+            cvs.height = cvs.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // ════ MAIN LOGIC ════
         btn.addEventListener('click', async () => {
             try {
-                log("Scanning for FFE0 (Serial) & FFF0 (MyndBand)...");
-                const device = await navigator.bluetooth.requestDevice({
+                // 1. SCAN
+                log("Scanning for MyndBand (Dual Service)...", 'l-warn');
+                device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    optionalServices: [UUID_SERIAL_SERVICE, UUID_MYND_SERVICE]
+                    optionalServices: [UUIDS.SERIAL_SERVICE, UUIDS.MYND_SERVICE]
                 });
 
                 log(`Connecting to ${device.name}...`);
-                const server = await device.gatt.connect();
-                log("Connected.", "success");
+                server = await device.gatt.connect();
+                log("Connected.", 'l-ok');
 
-                // 1. GET THE UNLOCK CHANNEL (FFE1)
-                log("Accessing Serial Service (FFE0)...");
-                let writeChar = null;
+                // 2. SEARCH FOR HIDDEN SERIAL SERVICE (FFE0)
+                log("Hunting for Serial Service (FFE0)...");
+                let serialService = null;
                 try {
-                    const service = await server.getPrimaryService(UUID_SERIAL_SERVICE);
-                    writeChar = await service.getCharacteristic(UUID_SERIAL_CHAR);
-                    log("Found Unlock Channel: ...ffe1", "success");
+                    serialService = await server.getPrimaryService(UUIDS.SERIAL_SERVICE);
+                    log("FOUND SERIAL SERVICE! (The Hidden Door)", 'l-ok');
                 } catch(e) {
-                    log("Could not find FFE0 service! Checking MyndBand...", "error");
+                    log("Could not find Serial Service. This is unexpected given the logs.", 'l-err');
                 }
 
-                // 2. SETUP LISTENERS (Listen everywhere)
+                // 3. LISTEN TO EVERYTHING (Data might come on FFF4 or FFE1)
                 const services = await server.getPrimaryServices();
                 for (const s of services) {
                     const chars = await s.getCharacteristics();
@@ -78,59 +131,161 @@
                         if (c.properties.notify) {
                             await c.startNotifications();
                             c.addEventListener('characteristicvaluechanged', handleData);
-                            log(`Listening on ...${c.uuid.substring(4,8)}`);
+                            log(`Listening on ...${c.uuid.substring(4,8)}`, 'l-ok');
                         }
                     }
                 }
 
-                // 3. SEND THE MAGIC BYTE
-                if (writeChar) {
-                    log(">>> SENDING MAGIC BYTE: 0x02 <<<", "success");
-                    const cmd = new Uint8Array([0x02]);
-                    await writeChar.writeValueWithoutResponse(cmd);
-                    log("Command Sent.", "success");
+                // 4. SEND THE MAGIC UNLOCK COMMAND (0x02 to FFE1)
+                if (serialService) {
+                    try {
+                        const writeChar = await serialService.getCharacteristic(UUIDS.SERIAL_CHAR);
+                        const cmd = new Uint8Array([0x02]);
+                        
+                        log(">>> SENDING UNLOCK CODE (0x02) <<<", 'l-warn');
+                        
+                        // Try "Write Without Response" first (faster, often required for cmd)
+                        if (writeChar.properties.writeWithoutResponse) {
+                            await writeChar.writeValueWithoutResponse(cmd);
+                        } else {
+                            await writeChar.writeValue(cmd);
+                        }
+                        log("Command Sent Successfully.", 'l-ok');
+                    } catch(e) {
+                        log("Write Failed: " + e.message, 'l-err');
+                    }
                 } else {
-                    log("FATAL: Cannot write command. No FFE1 found.", "error");
+                    log("Skipping Unlock (No Serial Service found). Data likely won't start.", 'l-err');
                 }
 
+                // UI Cleanup
                 btn.disabled = true;
-                btn.innerText = "RUNNING";
-                draw();
+                btn.innerText = "STREAMING ACTIVE";
+                
+                // Start Loops
+                requestAnimationFrame(draw);
+                setInterval(() => {
+                    document.getElementById('val-pps').innerText = packetCount;
+                    packetCount = 0;
+                }, 1000);
 
             } catch(e) {
-                log("ERROR: " + e.message, "error");
+                log("ERROR: " + e.message, 'l-err');
             }
         });
 
+        // ════ PARSER ════
+        // The data stream from Serial is often fragmented. We need a simple buffer.
+        let buffer = [];
+
         function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
+            packetCount++;
+
+            // Push bytes to buffer
+            for (let i=0; i<data.length; i++) buffer.push(data[i]);
             
-            // Simple Parse: Look for 0x80 (Raw)
-            for(let i=0; i<data.length-3; i++) {
-                if(data[i] === 0x80) {
-                    let val = (data[i+2] << 8) | data[i+3];
-                    if(val >= 32768) val -= 65536;
-                    rawBuffer.push(val);
-                    rawBuffer.shift();
-                    i+=3;
+            // Limit buffer size
+            if (buffer.length > 1024) buffer.splice(0, 512);
+
+            processBuffer();
+        }
+
+        function processBuffer() {
+            // NeuroSky Protocol: [AA] [AA] [Len] [Payload] [Checksum]
+            // Payload often contains [80] [02] [High] [Low] (Raw Wave)
+            
+            while (buffer.length >= 4) {
+                // Quick scan for Raw Data 0x80 (Sometimes it comes without AA AA wrapper on Serial!)
+                // If we see [AA] [AA], we parse formally. 
+                // If we see [80] [02] [XX] [XX], we just grab it.
+                
+                // Strategy A: Formal Sync
+                if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
+                    const len = buffer[2];
+                    if (buffer.length >= 3 + len + 1) {
+                        const payload = buffer.slice(3, 3 + len);
+                        parsePayload(payload);
+                        buffer.splice(0, 3 + len + 1); // Consume
+                        continue;
+                    } else {
+                        return; // Wait for more
+                    }
+                }
+
+                // Strategy B: Naked Stream (Common on HM-10 bridges)
+                // Look for 0x80 followed immediately by length 0x02
+                if (buffer[0] === 0x80 && buffer[1] === 0x02) {
+                    const val = (buffer[2] << 8) | buffer[3];
+                    updateRaw(val);
+                    buffer.splice(0, 4);
+                    continue;
+                }
+
+                // Strategy C: MyndBand Wrapper [00] [00] [80]...
+                if (buffer[0] === 0x00 && buffer[1] === 0x00 && buffer[2] === 0x80) {
+                     // likely MyndBand packet
+                     buffer.shift(); buffer.shift(); // Strip 00 00 and let loop catch 80
+                     continue;
+                }
+
+                // No sync, shift 1
+                buffer.shift();
+            }
+        }
+
+        function parsePayload(payload) {
+            let i = 0;
+            while (i < payload.length) {
+                const code = payload[i];
+                if (code === 0x80) { // Raw
+                    const len = payload[i+1]; // Should be 0x02
+                    const val = (payload[i+2] << 8) | payload[i+3];
+                    updateRaw(val);
+                    i += 4;
+                } else if (code === 0x02) { // Signal
+                    document.getElementById('val-sig').innerText = payload[i+1];
+                    i += 2;
+                } else if (code === 0x04) { // Att
+                    document.getElementById('val-att').innerText = payload[i+1];
+                    i += 2;
+                } else if (code === 0x05) { // Med
+                    document.getElementById('val-med').innerText = payload[i+1];
+                    i += 2;
+                } else {
+                    i++;
                 }
             }
         }
 
+        function updateRaw(val) {
+            let raw = val;
+            if (raw >= 32768) raw -= 65536;
+            
+            rawBuffer.push(raw);
+            rawBuffer.shift();
+        }
+
+        // ════ RENDER ════
         function draw() {
-            ctx.fillStyle = "black";
-            ctx.fillRect(0,0, cvs.width, cvs.height);
-            ctx.strokeStyle = "#00ff00";
-            ctx.lineWidth = 2;
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, cvs.width, cvs.height);
+            
+            ctx.strokeStyle = "#00ff9d";
+            ctx.lineWidth = 1.5;
             ctx.beginPath();
             
-            let step = cvs.width / rawBuffer.length;
-            let mid = cvs.height / 2;
-            
-            for(let i=0; i<rawBuffer.length; i++) {
-                let y = mid - (rawBuffer[i] * 0.15);
-                if(i===0) ctx.moveTo(i*step, y);
-                else ctx.lineTo(i*step, y);
+            const w = cvs.width;
+            const h = cvs.height;
+            const step = w / rawBuffer.length;
+            const mid = h / 2;
+
+            for (let i=0; i<rawBuffer.length; i++) {
+                const x = i * step;
+                // Scale: Raw is +/- 2048. Screen is h. 
+                const y = mid - (rawBuffer[i] * (h/4000));
+                if (i===0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
             }
             ctx.stroke();
             requestAnimationFrame(draw);
