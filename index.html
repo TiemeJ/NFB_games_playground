@@ -3,61 +3,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MyndBand Raw Stream & FFT</title>
+    <title>NeuroOscilloscope V2 (Force Mode)</title>
     <style>
-        :root { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --accent: #00f2ea; --raw: #ff0055; }
+        :root { --bg: #121212; --card: #1e1e1e; --text: #e0e0e0; --accent: #00f2ea; --warn: #ff9f43; }
         body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
         
         h1 { margin: 0; font-weight: 300; letter-spacing: 2px; }
         .subtitle { color: #888; font-size: 0.8em; margin-bottom: 20px; }
         
         /* Controls */
-        .controls { display: flex; gap: 15px; margin-bottom: 20px; }
-        button { padding: 12px 30px; font-size: 16px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 5px; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
-        button:hover { box-shadow: 0 0 15px var(--accent); transform: scale(1.05); }
-        button:disabled { background: #555; color: #888; cursor: not-allowed; transform: none; box-shadow: none; }
-
-        /* Dashboard Grid */
-        .dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; width: 100%; max-width: 1000px; }
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center; }
+        button { padding: 10px 20px; font-size: 14px; font-weight: bold; background: var(--accent); color: #000; border: none; border-radius: 4px; cursor: pointer; text-transform: uppercase; }
+        button:hover { filter: brightness(1.2); }
+        button:disabled { background: #444; color: #888; cursor: not-allowed; }
         
-        /* Cards */
-        .card { background: var(--card); padding: 15px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); border: 1px solid #333; }
-        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px; }
-        .card-title { font-size: 0.9em; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
-        .stat { font-size: 0.8em; color: var(--accent); }
+        .btn-force { background: var(--warn); color: #000; }
 
-        /* Canvas Containers */
-        .canvas-container { width: 100%; height: 250px; position: relative; background: #000; border-radius: 5px; overflow: hidden; }
+        /* Dashboard */
+        .dashboard { display: grid; grid-template-columns: 1fr; gap: 20px; width: 100%; max-width: 1000px; }
+        .card { background: var(--card); padding: 15px; border-radius: 8px; border: 1px solid #333; }
+        .canvas-container { width: 100%; height: 250px; background: #000; border-radius: 4px; position: relative; }
         canvas { display: block; width: 100%; height: 100%; }
 
-        /* Stats Row */
+        /* Stats */
         .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
-        .stat-box { background: #252525; padding: 10px; text-align: center; border-radius: 5px; }
-        .stat-label { font-size: 0.7em; color: #888; }
+        .stat-box { background: #252525; padding: 10px; text-align: center; border-radius: 4px; }
         .stat-val { font-size: 1.2em; font-weight: bold; color: #fff; }
+        .stat-label { font-size: 0.7em; color: #888; }
 
-        /* Status Indicator */
-        #status-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #555; margin-right: 8px; }
-        .connected #status-dot { background: #0f0; box-shadow: 0 0 10px #0f0; }
-        .scanning #status-dot { background: #ff0; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.5; } }
+        /* Debug Log */
+        #debug-log { 
+            font-family: 'Courier New', monospace; 
+            font-size: 11px; 
+            color: #0f0; 
+            height: 120px; 
+            overflow-y: auto; 
+            background: #000; 
+            padding: 10px; 
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
 
-    <h1><span id="status-dot"></span>NEURO<span style="color:var(--accent)">OSCILLOSCOPE</span></h1>
-    <div class="subtitle">512Hz Raw Data • Real-time FFT Analysis</div>
+    <h1>NEURO<span style="color:var(--accent)">OSCILLOSCOPE</span> V2</h1>
+    <div class="subtitle">512Hz Raw Data • Force Mode Enabled</div>
 
     <div class="controls">
-        <button id="connectBtn">Connect Headset</button>
-        <button id="freezeBtn" disabled>Freeze Graph</button>
+        <button id="connectBtn">1. Connect</button>
+        <button id="forceBtn" class="btn-force" disabled>2. Force 512Hz Mode</button>
+        <button id="freezeBtn" disabled>Freeze</button>
     </div>
 
     <div class="dashboard">
-        
         <div class="stats-row">
             <div class="stat-box">
-                <div class="stat-label">Signal Quality</div>
+                <div class="stat-label">Packet Rate</div>
+                <div class="stat-val" id="val-fps">0 pps</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Signal</div>
                 <div class="stat-val" id="val-quality">--</div>
             </div>
             <div class="stat-box">
@@ -68,347 +74,261 @@
                 <div class="stat-label">Meditation</div>
                 <div class="stat-val" id="val-med">--</div>
             </div>
-            <div class="stat-box">
-                <div class="stat-label">Buffer (Sample/sec)</div>
-                <div class="stat-val" id="val-fps">0 Hz</div>
-            </div>
         </div>
 
         <div class="card">
-            <div class="card-header">
-                <div class="card-title">Raw EEG (512Hz)</div>
-                <div class="stat">Scale: <span id="scale-val">AUTO</span></div>
-            </div>
             <div class="canvas-container">
                 <canvas id="rawCanvas"></canvas>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-header">
-                <div class="card-title">Live Frequency Spectrum (FFT)</div>
-                <div class="stat">0 - 60 Hz</div>
-            </div>
-            <div class="canvas-container" style="height: 200px;">
-                <canvas id="fftCanvas"></canvas>
-            </div>
-        </div>
-
-        <div class="card" style="font-family: monospace; font-size: 10px; color: #666; height: 100px; overflow-y: scroll;" id="debug-log">
-            > Ready to connect...
+            <div style="margin-bottom:5px; color:#666; font-size:10px;">DEBUG LOG (HEX DUMP)</div>
+            <div id="debug-log">> Ready. Click Connect.</div>
         </div>
     </div>
 
     <script>
-        // ════════════════════ CONFIGURATION ════════════════════
-        // MyndBand / NeuroSky Service UUIDs
+        // ════ CONFIG ════
         const SERVICE_UUID = "039afff0-2c94-11e3-9e06-0002a5d5c51b"; 
-        const DATA_CHAR_UUID = "039afff8-2c94-11e3-9e06-0002a5d5c51b"; // Receive
-        const CMD_CHAR_UUID = "039afff9-2c94-11e3-9e06-0002a5d5c51b";  // Send (often used to enable raw)
+        const NOTIFY_UUID  = "039afff8-2c94-11e3-9e06-0002a5d5c51b"; // Read/Notify
+        const WRITE_UUID   = "039afff9-2c94-11e3-9e06-0002a5d5c51b"; // Write Command
 
-        // ════════════════════ STATE ════════════════════
-        let device, server, service, notifyChar, cmdChar;
+        // ════ STATE ════
+        let device, server, service, notifyChar, writeChar;
         let isFreezed = false;
-        let sampleRateCounter = 0;
-        let lastSampleTime = Date.now();
+        let packetCount = 0;
         
-        // Data Buffers
-        const RAW_BUFFER_SIZE = 512 * 2; // 2 seconds of data
-        let rawBuffer = new Array(RAW_BUFFER_SIZE).fill(0);
-        let fftData = new Array(64).fill(0); // 0-60Hz bins
-
-        // Parser State
-        let parseStage = 0; // 0=Sync1, 1=Sync2, 2=PayloadLen, 3=Payload, 4=ChkSum
-        let payloadLen = 0;
-        let payloadBytes = [];
-        let chkSum = 0;
-
-        // ════════════════════ UI ELEMENTS ════════════════════
+        // Buffers
+        const RAW_SIZE = 512 * 3; 
+        let rawBuffer = new Array(RAW_SIZE).fill(0);
+        
+        // UI
         const rawCanvas = document.getElementById('rawCanvas');
-        const fftCanvas = document.getElementById('fftCanvas');
-        const ctxRaw = rawCanvas.getContext('2d');
-        const ctxFft = fftCanvas.getContext('2d');
+        const ctx = rawCanvas.getContext('2d');
         const debugEl = document.getElementById('debug-log');
         
-        // Resize Canvas
         function resize() {
             rawCanvas.width = rawCanvas.parentElement.clientWidth;
             rawCanvas.height = rawCanvas.parentElement.clientHeight;
-            fftCanvas.width = fftCanvas.parentElement.clientWidth;
-            fftCanvas.height = fftCanvas.parentElement.clientHeight;
         }
         window.addEventListener('resize', resize);
         resize();
 
         function log(msg) {
-            debugEl.innerHTML += `<div>> ${msg}</div>`;
+            const line = document.createElement('div');
+            line.innerText = "> " + msg;
+            debugEl.appendChild(line);
             debugEl.scrollTop = debugEl.scrollHeight;
         }
 
-        // ════════════════════ BLUETOOTH CONNECTION ════════════════════
+        // ════ BLUETOOTH ════
         document.getElementById('connectBtn').addEventListener('click', async () => {
             try {
-                log("Scanning for MyndBand/NeuroSky...");
-                document.body.classList.add("scanning");
-                
+                log("Scanning...");
                 device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
                     optionalServices: [SERVICE_UUID]
                 });
 
-                log("Connecting to GATT Server...");
+                log("Connecting GATT...");
                 server = await device.gatt.connect();
                 service = await server.getPrimaryService(SERVICE_UUID);
 
-                // Try to get Notify Char
-                try {
-                    notifyChar = await service.getCharacteristic(DATA_CHAR_UUID);
-                } catch(e) {
-                    // Fallback search
-                    const chars = await service.getCharacteristics();
-                    notifyChar = chars.find(c => c.properties.notify);
-                }
+                // Get Characteristics
+                log("Getting Characteristics...");
+                const chars = await service.getCharacteristics();
+                
+                // Find Notify (fff8) and Write (fff9)
+                notifyChar = chars.find(c => c.uuid.includes("fff8")) || chars[0];
+                writeChar  = chars.find(c => c.uuid.includes("fff9"));
 
-                if (!notifyChar) throw "No Notify Characteristic found";
+                // Fallback: If fff9 not found, try to write to fff8
+                if (!writeChar && notifyChar.properties.write) writeChar = notifyChar;
 
                 await notifyChar.startNotifications();
                 notifyChar.addEventListener('characteristicvaluechanged', handleData);
                 
-                // Attempt to send "Enable Raw" command (Command 0x02 or 0x00 often wakes the stream)
-                // Some chips default to 9600 baud (no raw). We try to switch modes if possible.
-                // Note: The MyndBand usually streams raw by default if the connection is fast enough.
-                
-                document.body.classList.remove("scanning");
-                document.body.classList.add("connected");
+                log("Connected! Listening...");
                 document.getElementById('connectBtn').disabled = true;
-                document.getElementById('connectBtn').innerText = "Streaming";
+                document.getElementById('connectBtn').innerText = "Connected";
+                document.getElementById('forceBtn').disabled = false;
                 document.getElementById('freezeBtn').disabled = false;
-                log("Connected! Waiting for 0x80 packets...");
-                
-                // Start Animation Loop
+
+                // Start Visuals
                 requestAnimationFrame(drawLoop);
-                
-                // Start FPS counter
                 setInterval(() => {
-                    document.getElementById('val-fps').innerText = sampleRateCounter + " Hz";
-                    sampleRateCounter = 0;
+                    document.getElementById('val-fps').innerText = packetCount + " pps";
+                    packetCount = 0;
                 }, 1000);
 
             } catch (e) {
-                log("Error: " + e);
-                document.body.classList.remove("scanning");
+                log("ERR: " + e);
+            }
+        });
+
+        // ════ COMMAND INJECTION ════
+        document.getElementById('forceBtn').addEventListener('click', async () => {
+            if (!writeChar) { log("No Write Characteristic found!"); return; }
+            
+            try {
+                // Command 0x02 is the standard NeuroSky "Enable Raw" command
+                const cmd = new Uint8Array([0x02]); 
+                // Alternatively try 0x00 if 0x02 fails
+                // const cmd = new Uint8Array([0x00]); 
+                
+                log("Sending Command: 0x02 (Force Raw)...");
+                await writeChar.writeValue(cmd);
+                log("Command Sent! Watch graph...");
+            } catch(e) {
+                log("Write Failed: " + e);
             }
         });
 
         document.getElementById('freezeBtn').addEventListener('click', () => {
             isFreezed = !isFreezed;
-            document.getElementById('freezeBtn').innerText = isFreezed ? "Resume" : "Freeze Graph";
         });
 
-        // ════════════════════ DATA PARSER (The Core) ════════════════════
-        // The ThinkGear protocol sends packets: [AA] [AA] [Len] [Payload...] [Checksum]
-        // Inside Payload, we look for [0x80] [High] [Low] (Raw Wave)
+        // ════ PARSER ════
+        // We buffer bytes because BLE splits packets randomly
+        let buffer = []; 
         
         function handleData(event) {
             const data = new Uint8Array(event.target.value.buffer);
+            packetCount++;
+
+            // HEX DUMP DEBUG (First 50 packets only to avoid lag)
+            // if (packetCount < 50) {
+            //     const hex = Array.from(data).map(b => b.toString(16).padStart(2,'0')).join(' ');
+            //     log(`RX: ${hex}`);
+            // }
+
+            // Push to main buffer
+            for (let i=0; i<data.length; i++) buffer.push(data[i]);
             
-            for (let i = 0; i < data.length; i++) {
-                const byte = data[i];
+            // Limit buffer size to prevent memory leak if sync fails
+            if (buffer.length > 2048) buffer.splice(0, 1024);
 
-                switch (parseStage) {
-                    case 0: // Sync 1
-                        if (byte === 0xAA) parseStage = 1;
-                        break;
-                    case 1: // Sync 2
-                        if (byte === 0xAA) parseStage = 2;
-                        else parseStage = 0;
-                        break;
-                    case 2: // Length
-                        if (byte > 169) { // Max payload size violation
-                            parseStage = 0;
-                        } else {
-                            payloadLen = byte;
-                            payloadBytes = [];
-                            chkSum = 0;
-                            parseStage = 3;
-                        }
-                        break;
-                    case 3: // Payload Accumulation
-                        payloadBytes.push(byte);
-                        chkSum += byte;
-                        if (payloadBytes.length >= payloadLen) {
-                            parseStage = 4;
-                        }
-                        break;
-                    case 4: // Checksum verify
-                        chkSum &= 0xFF;
-                        chkSum = (~chkSum) & 0xFF;
+            processBuffer();
+        }
 
-                        if (byte === chkSum) {
-                            parsePacket(payloadBytes); // SUCCESS!
+        function processBuffer() {
+            while (buffer.length >= 3) {
+                // Look for Sync Bytes
+                // Standard NeuroSky: [AA] [AA]
+                if (buffer[0] === 0xAA && buffer[1] === 0xAA) {
+                    // We found a standard packet!
+                    const len = buffer[2];
+                    if (buffer.length >= 3 + len + 1) {
+                        // Extract Payload
+                        const payload = buffer.slice(3, 3 + len);
+                        const checksum = buffer[3 + len];
+                        
+                        // Verify Checksum
+                        let sum = 0;
+                        for (let b of payload) sum += b;
+                        sum = (~sum) & 0xFF;
+
+                        if (sum === checksum) {
+                            parsePayload(payload);
+                            // Remove this packet from buffer
+                            buffer.splice(0, 3 + len + 1);
                         } else {
-                            // log("Checksum fail");
+                            // Bad checksum, shift 1 byte and retry
+                            buffer.shift(); 
                         }
-                        parseStage = 0;
-                        break;
+                    } else {
+                        // Wait for more data
+                        return;
+                    }
+                } 
+                // MyndBand Wrapper: [00] [00] ... [AA] [AA] inside? 
+                // Or [00] [00] [TYPE] ...
+                else if (buffer[0] === 0x00 && buffer[1] === 0x00) {
+                    // This is likely a wrapper. Remove header and see what's next.
+                    // Usually MyndBand sends 00 00 [Type] 00 ...
+                    // If we strip the first 2 bytes, the next loop might catch AA AA if it's embedded,
+                    // or we might need to parse specific MyndBand types (EB/EC).
+                    // For now, let's just strip them to expose inner data.
+                    buffer.shift(); 
+                    buffer.shift(); 
+                }
+                else {
+                    // Garbage byte, shift
+                    buffer.shift();
                 }
             }
         }
 
-        function parsePacket(bytes) {
+        function parsePayload(payload) {
             let i = 0;
-            while (i < bytes.length) {
-                const code = bytes[i];
+            while (i < payload.length) {
+                const code = payload[i];
                 
-                // 0x80 = RAW WAVE (2 bytes)
+                // 0x80 = RAW WAVE (2 bytes big-endian)
                 if (code === 0x80) {
-                    const len = bytes[i+1]; // Usually 2
-                    const high = bytes[i+2];
-                    const low = bytes[i+3];
+                    const len = payload[i+1]; // Should be 2
+                    const val = (payload[i+2] << 8) | payload[i+3];
                     
-                    // Convert 16-bit big-endian signed to integer
-                    let raw = (high << 8) | low;
+                    // Convert signed 16-bit
+                    let raw = val;
                     if (raw >= 32768) raw -= 65536;
-
-                    // Push to Buffer
+                    
                     if (!isFreezed) {
                         rawBuffer.push(raw);
                         rawBuffer.shift();
-                        sampleRateCounter++;
                     }
-                    
-                    i += 4; // Code + Len + High + Low
-                } 
-                // 0x02 = Signal Quality (1 byte)
+                    i += 4;
+                }
+                // 0x02 = Signal Quality
                 else if (code === 0x02) {
-                    const val = bytes[i+1];
-                    document.getElementById('val-quality').innerText = val === 0 ? "Good" : (val === 200 ? "Off" : "Poor");
-                    document.getElementById('val-quality').style.color = val === 0 ? "#0f0" : "#f00";
+                    const q = payload[i+1];
+                    document.getElementById('val-quality').innerText = q === 0 ? "Good" : (q===200?"Off":"Noise");
                     i += 2;
                 }
-                // 0x04 = Attention (1 byte)
+                // 0x04 = Attention
                 else if (code === 0x04) {
-                    document.getElementById('val-att').innerText = bytes[i+1];
+                    document.getElementById('val-att').innerText = payload[i+1];
                     i += 2;
                 }
-                // 0x05 = Meditation (1 byte)
+                // 0x05 = Meditation
                 else if (code === 0x05) {
-                    document.getElementById('val-med').innerText = bytes[i+1];
+                    document.getElementById('val-med').innerText = payload[i+1];
                     i += 2;
                 }
-                // Skip unknown codes (Usually multi-byte structure)
                 else {
-                    // Simple heuristic: Most other ThinkGear codes are [Code] [Value]
-                    // If we get lost, the next packet sync (AA AA) will reset us.
+                    // Unknown code, try to skip
                     i++;
                 }
             }
         }
 
-        // ════════════════════ VISUALIZATION & FFT ════════════════════
-        
+        // ════ RENDER ════
         function drawLoop() {
-            if (!isFreezed) {
-                drawOscilloscope();
-                if (sampleRateCounter > 10) computeFFT(); // Only compute if data is flowing
-            }
-            requestAnimationFrame(drawLoop);
-        }
+            if (isFreezed) { requestAnimationFrame(drawLoop); return; }
 
-        function drawOscilloscope() {
+            ctx.clearRect(0, 0, rawCanvas.width, rawCanvas.height);
+            ctx.strokeStyle = "#00f2ea";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+
+            const slice = rawBuffer.slice(rawBuffer.length - 1024);
             const w = rawCanvas.width;
             const h = rawCanvas.height;
-            const mid = h / 2;
-            
-            ctxRaw.clearRect(0, 0, w, h);
-            
-            // Grid lines
-            ctxRaw.strokeStyle = "#333";
-            ctxRaw.lineWidth = 1;
-            ctxRaw.beginPath();
-            ctxRaw.moveTo(0, mid); ctxRaw.lineTo(w, mid);
-            ctxRaw.stroke();
-
-            // Waveform
-            ctxRaw.strokeStyle = "#ff0055";
-            ctxRaw.lineWidth = 2;
-            ctxRaw.beginPath();
-            
-            // Draw last 512 points (1 second)
-            // Scaling: Raw values are usually +/- 200 to 2000. 
-            // We map +/- 1000 to full height.
-            const slice = rawBuffer.slice(RAW_BUFFER_SIZE - 512); 
             const step = w / slice.length;
-            
+
             for (let i = 0; i < slice.length; i++) {
                 const x = i * step;
-                // Scale factor: 0.2 puts typical EEG in readable range
-                const y = mid - (slice[i] * 0.15); 
-                if (i === 0) ctxRaw.moveTo(x, y);
-                else ctxRaw.lineTo(x, y);
+                // Scale factor: Raw is +/- 2000ish typically. 
+                // We map that to screen height. 
+                const y = (h/2) - (slice[i] * 0.15); 
+                if (i===0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
             }
-            ctxRaw.stroke();
+            ctx.stroke();
+
+            requestAnimationFrame(drawLoop);
         }
-
-        // Simple JS FFT Implementation (Cooley-Tukey not needed for display purposes, simple DFT is fine for low bin count)
-        // Note: For 512Hz sample rate, Nyquist is 256Hz. We care about 1-60Hz.
-        function computeFFT() {
-            // Take recent samples (power of 2)
-            const samples = rawBuffer.slice(RAW_BUFFER_SIZE - 256);
-            const N = samples.length;
-            
-            // We only calculate first 60 bins (approx 0-60Hz)
-            // To do this fast without a heavy library, we do a basic correlation for frequencies of interest.
-            
-            let spectrum = [];
-            // Resolution: 512Hz / 256 samples = 2Hz per bin.
-            // We want up to 60Hz -> 30 bins.
-            
-            for (let k = 1; k < 40; k++) { // k is frequency index
-                let real = 0;
-                let imag = 0;
-                for (let n = 0; n < N; n++) {
-                    const angle = (2 * Math.PI * k * n) / N;
-                    real += samples[n] * Math.cos(angle);
-                    imag -= samples[n] * Math.sin(angle);
-                }
-                const magnitude = Math.sqrt(real * real + imag * imag);
-                spectrum.push(magnitude);
-            }
-            
-            drawFFT(spectrum);
-        }
-
-        function drawFFT(data) {
-            const w = fftCanvas.width;
-            const h = fftCanvas.height;
-            
-            ctxFft.clearRect(0, 0, w, h);
-            
-            const barWidth = (w / data.length) - 2;
-            const maxVal = 50000; // Arbitrary clamp for visual scaling
-
-            for (let i = 0; i < data.length; i++) {
-                let mag = data[i];
-                // Logarithmic scaling for better visibility
-                let hBar = (mag / maxVal) * h * 5; 
-                if (hBar > h) hBar = h;
-
-                // Color based on Frequency Band
-                // 0-4 (Delta), 4-8 (Theta), 8-12 (Alpha), 12-30 (Beta), 30+ (Gamma)
-                const hz = i * 2; // Each bin is ~2Hz
-                let color = "#fff";
-                if (hz < 4) color = "#6c5ce7"; // Delta
-                else if (hz < 8) color = "#0984e3"; // Theta
-                else if (hz < 13) color = "#00b894"; // Alpha
-                else if (hz < 30) color = "#fdcb6e"; // Beta
-                else color = "#d63031"; // Gamma
-
-                ctxFft.fillStyle = color;
-                ctxFft.fillRect(i * (barWidth + 2), h - hBar, barWidth, hBar);
-            }
-        }
-
     </script>
 </body>
 </html>
