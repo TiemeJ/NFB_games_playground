@@ -3,113 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NeuroScope V13: Manual Override</title>
+    <title>NeuroScope V14: Raw Terminal</title>
     <style>
-        :root { --bg: #050505; --panel: #111; --text: #ccc; --accent: #00e5ff; --btn: #222; --btn-hover: #333; }
-        body { font-family: 'Segoe UI', monospace; background: var(--bg); color: var(--text); padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        :root { --bg: #1e1e1e; --term: #000; --text: #0f0; --btn: #333; --accent: #00ff00; }
+        body { font-family: 'Consolas', 'Monaco', monospace; background: var(--bg); color: #ccc; padding: 20px; display: flex; flex-direction: column; align-items: center; }
         
-        h1 { margin: 0; color: #fff; border-bottom: 2px solid var(--accent); padding-bottom: 10px; }
-        .sub { margin-bottom: 20px; color: #666; font-size: 0.9em; }
-
-        /* Main Control Grid */
-        .control-panel { display: grid; grid-template-columns: 1fr 250px; gap: 20px; width: 100%; max-width: 1000px; margin-bottom: 20px; }
+        h1 { color: #fff; border-bottom: 2px solid var(--text); padding-bottom: 10px; }
         
-        /* Left: Graph */
-        .graph-box { height: 400px; background: #000; border: 1px solid #333; border-radius: 8px; position: relative; }
-        canvas { width: 100%; height: 100%; display: block; }
-
-        /* Right: Manual Controls */
-        .controls { background: var(--panel); padding: 15px; border-radius: 8px; border: 1px solid #333; display: flex; flex-direction: column; gap: 10px; }
+        /* Layout */
+        .container { display: grid; grid-template-columns: 1fr 300px; gap: 20px; width: 100%; max-width: 1000px; height: 500px; }
         
-        button.connect { background: var(--accent); color: #000; font-weight: bold; padding: 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; margin-bottom: 10px; }
+        /* Terminal */
+        .terminal { background: var(--term); border: 2px solid #555; padding: 15px; overflow-y: auto; font-size: 12px; color: var(--text); display: flex; flex-direction: column-reverse; }
+        .term-line { margin-bottom: 2px; border-bottom: 1px solid #111; }
+        .ts { color: #666; margin-right: 10px; }
         
-        .cmd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        button.cmd { background: var(--btn); color: var(--accent); border: 1px solid #333; padding: 10px; cursor: pointer; border-radius: 4px; font-family: monospace; font-size: 12px; transition: 0.2s; }
-        button.cmd:hover { background: var(--btn-hover); border-color: var(--accent); }
-        button.cmd:active { transform: translateY(2px); }
-
-        /* Stats */
-        .stats-box { margin-top: auto; padding-top: 15px; border-top: 1px solid #333; }
-        .stat-row { display: flex; justify-content: space-between; font-size: 0.8em; margin-bottom: 5px; }
-        .stat-val { color: #fff; font-weight: bold; }
-        .rx-active { color: #0f0; text-shadow: 0 0 10px #0f0; }
-
-        /* Log */
-        #log { width: 100%; max-width: 1000px; height: 100px; background: #080808; border: 1px solid #333; padding: 10px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 11px; color: #888; border-radius: 4px; }
+        /* Controls */
+        .controls { display: flex; flex-direction: column; gap: 15px; }
+        
+        button { padding: 12px; background: var(--btn); color: #fff; border: 1px solid #555; cursor: pointer; font-family: inherit; transition: 0.2s; }
+        button:hover { background: #444; border-color: #fff; }
+        button.connect { background: var(--accent); color: #000; font-weight: bold; }
+        
+        .stat-box { background: #252526; padding: 10px; border: 1px solid #333; }
+        .stat-val { font-size: 1.5em; font-weight: bold; color: #fff; }
+        .stat-lbl { font-size: 0.7em; text-transform: uppercase; color: #888; }
+        
+        .byte-cnt { color: #fff; }
     </style>
 </head>
 <body>
 
-    <h1>NEUROSCOPE V13</h1>
-    <div class="sub">Manual Protocol Injection & Raw Stream Monitor</div>
-
-    <div class="control-panel">
-        <div class="graph-box">
-            <canvas id="scope"></canvas>
+    <h1>NEUROSCOPE V14: RAW TERMINAL</h1>
+    
+    <div class="container">
+        <div class="terminal" id="term">
+            <div class="term-line">> Ready. Waiting for connection...</div>
         </div>
-        
+
         <div class="controls">
-            <button id="btn-conn" class="connect">1. CONNECT</button>
+            <button id="btn-conn" class="connect">CONNECT</button>
             
-            <div style="font-size:0.7em; color:#666; text-transform:uppercase; margin:5px 0;">Inject Commands</div>
-            <div class="cmd-grid">
-                <button class="cmd" onclick="send([0x00])">TX: 0x00</button>
-                <button class="cmd" onclick="send([0x02])">TX: 0x02</button>
-                <button class="cmd" onclick="send([0xC2])">TX: 0xC2</button>
-                <button class="cmd" onclick="send([0x80])">TX: 0x80</button>
-                <button class="cmd" onclick="send([0x02, 0x00])">TX: 02 00</button>
-                <button class="cmd" onclick="send([0x00, 0x02])">TX: 00 02</button>
+            <div class="stat-box">
+                <div class="stat-lbl">Incoming Data</div>
+                <div class="stat-val" id="byte-counter">0 Bytes</div>
+                <div class="stat-lbl" id="pps-counter">0 PPS</div>
             </div>
 
-            <div class="stats-box">
-                <div class="stat-row">
-                    <span>STATUS</span>
-                    <span id="st-conn" class="stat-val">OFFLINE</span>
-                </div>
-                <div class="stat-row">
-                    <span>RAW BYTES</span>
-                    <span id="st-bytes" class="stat-val">0</span>
-                </div>
-                <div class="stat-row">
-                    <span>PACKETS/SEC</span>
-                    <span id="st-pps" class="stat-val">0</span>
-                </div>
-                <div class="stat-row">
-                    <span>SIGNAL</span>
-                    <span id="st-sig" class="stat-val">--</span>
-                </div>
-            </div>
+            <div style="font-size:0.8em; color:#aaa; margin-top:10px;">MANUAL KICK (INJECT)</div>
+            <button onclick="sendHex([0x02])">TX: 0x02 (BIN)</button>
+            <button onclick="sendStr('c')">TX: "c" (ASCII)</button>
+            <button onclick="sendHex([0x00])">TX: 0x00 (BIN)</button>
+            <button onclick="sendHex([0xC2])">TX: 0xC2 (LEGACY)</button>
+            <button onclick="sendHex([0x02, 0x00])">TX: 02 00 (SEQ)</button>
         </div>
     </div>
 
-    <div id="log">Ready. Connect to headset...</div>
-
     <script>
         // ════ CONFIG ════
-        const SERIAL = { service: "0000ffe0-0000-1000-8000-00805f9b34fb", char: "0000ffe1-0000-1000-8000-00805f9b34fb" };
-        const MYND   = { service: "039afff0-2c94-11e3-9e06-0002a5d5c51b" };
+        const SERVICES = [
+            "0000ffe0-0000-1000-8000-00805f9b34fb", // Serial
+            "039afff0-2c94-11e3-9e06-0002a5d5c51b", // MyndBand
+            "0000fff0-0000-1000-8000-00805f9b34fb"  // Standard
+        ];
 
         // ════ STATE ════
-        let device, server, txChar;
-        let rawBuffer = new Array(512).fill(0);
-        let byteCount = 0;
-        let ppsCount = 0;
-        let buffer = [];
+        let device, server;
+        let writeChar = null;
+        let totalBytes = 0;
+        let pps = 0;
 
         // ════ UI ════
-        const ui = {
-            conn: document.getElementById('st-conn'),
-            bytes: document.getElementById('st-bytes'),
-            pps: document.getElementById('st-pps'),
-            sig: document.getElementById('st-sig'),
-            log: document.getElementById('log'),
-            cvs: document.getElementById('scope')
-        };
-        const ctx = ui.cvs.getContext('2d');
+        const term = document.getElementById('term');
+        const countEl = document.getElementById('byte-counter');
+        const ppsEl = document.getElementById('pps-counter');
 
-        function log(msg) {
-            ui.log.innerHTML += `<div>> ${msg}</div>`;
-            ui.log.scrollTop = ui.log.scrollHeight;
+        function log(msg, isData = false) {
+            const line = document.createElement('div');
+            line.className = 'term-line';
+            const time = new Date().toISOString().split('T')[1].split('.')[0];
+            
+            if (isData) {
+                line.innerHTML = `<span class="ts">[${time}]</span> <span style="color:#fff">${msg}</span>`;
+            } else {
+                line.innerHTML = `<span class="ts">[${time}]</span> <span style="color:#aaa">${msg}</span>`;
+            }
+            
+            term.prepend(line); // Add to top
+            if(term.children.length > 100) term.lastElementChild.remove();
         }
 
         // ════ CONNECT ════
@@ -118,157 +99,102 @@
                 log("Scanning...");
                 device = await navigator.bluetooth.requestDevice({
                     filters: [{ namePrefix: 'Mynd' }, { namePrefix: 'Mind' }, { namePrefix: 'Brain' }],
-                    optionalServices: [SERIAL.service, MYND.service]
+                    optionalServices: SERVICES
                 });
 
-                ui.conn.innerText = "CONNECTING";
+                log(`Connecting to ${device.name}...`);
                 server = await device.gatt.connect();
-                ui.conn.innerText = "CONNECTED";
-                ui.conn.style.color = "#0f0";
-                log("Connected.");
+                log("Connected to GATT.");
 
-                // FIND SERIAL (For Writing)
-                try {
-                    const svc = await server.getPrimaryService(SERIAL.service);
-                    txChar = await svc.getCharacteristic(SERIAL.char);
-                    log("Unlock Channel Secured (FFE1).");
-                } catch(e) { log("Warning: Serial Service not found?"); }
-
-                // LISTEN EVERYWHERE
+                // SCAN SERVICES
                 const services = await server.getPrimaryServices();
-                for(const s of services) {
+                log(`Found ${services.length} Services.`);
+
+                for (const s of services) {
                     const chars = await s.getCharacteristics();
-                    for(const c of chars) {
-                        if(c.properties.notify) {
+                    for (const c of chars) {
+                        const uuid = c.uuid.substring(4,8);
+                        let props = [];
+                        if(c.properties.write) props.push("W");
+                        if(c.properties.writeWithoutResponse) props.push("WnR");
+                        if(c.properties.notify) props.push("N");
+                        
+                        log(`Found ...${uuid} [${props.join(',')}]`);
+
+                        // 1. SETUP LISTENER
+                        if (c.properties.notify) {
                             await c.startNotifications();
-                            c.addEventListener('characteristicvaluechanged', handleData);
-                            log(`Listening on ...${c.uuid.substring(4,8)}`);
+                            c.addEventListener('characteristicvaluechanged', (e) => {
+                                handleData(e, uuid);
+                            });
+                            log(`>>> LISTENING ON ...${uuid}`);
+                        }
+
+                        // 2. SETUP WRITER (Prefer FFE1 or first available)
+                        if ((c.properties.write || c.properties.writeWithoutResponse) && !writeChar) {
+                            writeChar = c;
+                            log(`<<< WRITER SET TO ...${uuid}`);
+                        }
+                        // Force override if we find FFE1 (Serial)
+                        if (uuid.includes('ffe1')) {
+                            writeChar = c;
+                            log(`<<< WRITER UPDATED TO SERIAL (...ffe1)`);
                         }
                     }
                 }
-                
-                log("Ready to inject commands.");
-                startLoops();
 
-            } catch(e) {
-                log("Error: " + e.message);
-                ui.conn.innerText = "ERROR";
-                ui.conn.style.color = "#f00";
+                log("SYSTEM READY. Waiting for data...");
+                setInterval(() => {
+                    ppsEl.innerText = pps + " Packets/Sec";
+                    pps = 0;
+                }, 1000);
+
+            } catch (e) {
+                log("ERROR: " + e.message);
             }
         });
 
-        // ════ COMMAND INJECTOR ════
-        window.send = async function(bytes) {
-            if(!txChar) { log("Error: No Write Channel"); return; }
+        // ════ DATA HANDLER ════
+        function handleData(event, uuid) {
+            pps++;
+            const data = new Uint8Array(event.target.value.buffer);
+            totalBytes += data.length;
+            countEl.innerText = totalBytes.toLocaleString() + " Bytes";
+
+            // FORMAT HEX
+            let hexStr = "";
+            for(let b of data) {
+                hexStr += b.toString(16).toUpperCase().padStart(2, '0') + " ";
+            }
+            
+            // Log it (Only if slow, or sample if fast)
+            if(pps < 10 || pps % 20 === 0) {
+                log(`RX [${uuid}]: ${hexStr}`, true);
+            }
+        }
+
+        // ════ SEND COMMANDS ════
+        window.sendHex = async function(arr) {
+            if(!writeChar) { log("NO WRITE CHANNEL!"); return; }
             try {
-                const data = new Uint8Array(bytes);
-                // Try "WriteWithoutResponse" first as it's common for these commands
-                if(txChar.properties.writeWithoutResponse) {
-                    await txChar.writeValueWithoutResponse(data);
+                const data = new Uint8Array(arr);
+                if(writeChar.properties.writeWithoutResponse) {
+                    await writeChar.writeValueWithoutResponse(data);
                 } else {
-                    await txChar.writeValue(data);
+                    await writeChar.writeValue(data);
                 }
-                log(`Sent: [${bytes.map(b=>"0x"+b.toString(16).toUpperCase()).join(' ')}]`);
-            } catch(e) {
-                log("Send Failed: " + e.message);
-            }
+                log(`TX: [${arr.map(b=>b.toString(16).toUpperCase()).join(' ')}]`);
+            } catch(e) { log("TX FAIL: " + e.message); }
         }
 
-        // ════ DATA HANDLING ════
-        function handleData(e) {
-            const data = new Uint8Array(e.target.value.buffer);
-            byteCount += data.length;
-            ui.bytes.innerText = byteCount.toLocaleString();
-            
-            // Push to parsing buffer
-            for(let i=0; i<data.length; i++) buffer.push(data[i]);
-            if(buffer.length > 2048) buffer.splice(0, 1024);
-            
-            parse();
-        }
-
-        function parse() {
-            while(buffer.length >= 4) {
-                // 1. RAW [80] [02] [H] [L]
-                if(buffer[0] === 0x80 && buffer[1] === 0x02) {
-                    const val = (buffer[2] << 8) | buffer[3];
-                    pushVal(val);
-                    buffer.splice(0, 4);
-                    ppsCount++;
-                    continue;
-                }
-                // 2. SYNC [AA] [AA]
-                if(buffer[0] === 0xAA && buffer[1] === 0xAA) {
-                    const len = buffer[2];
-                    if(buffer.length >= 3+len+1) {
-                        const payload = buffer.slice(3, 3+len);
-                        parsePayload(payload);
-                        buffer.splice(0, 3+len+1);
-                        continue;
-                    } else return;
-                }
-                buffer.shift();
-            }
-        }
-
-        function parsePayload(pl) {
-            for(let i=0; i<pl.length; i++) {
-                if(pl[i] === 0x80) { // Raw inside payload
-                    if(i+3 < pl.length) {
-                         const val = (pl[i+2]<<8)|pl[i+3];
-                         pushVal(val);
-                         ppsCount++;
-                         i+=3;
-                    }
-                } else if (pl[i] === 0x02) { // Signal
-                     ui.sig.innerText = pl[i+1];
-                     ui.sig.style.color = pl[i+1]===0 ? "#0f0" : "#f00";
-                     i++;
-                }
-            }
-        }
-
-        function pushVal(val) {
-            let raw = val;
-            if(raw >= 32768) raw -= 65536;
-            rawBuffer.push(raw);
-            rawBuffer.shift();
-        }
-
-        function startLoops() {
-            // Resize
-            ui.cvs.width = ui.cvs.parentElement.clientWidth;
-            ui.cvs.height = ui.cvs.parentElement.clientHeight;
-
-            // Draw
-            function draw() {
-                const w = ui.cvs.width;
-                const h = ui.cvs.height;
-                ctx.fillStyle = "#000";
-                ctx.fillRect(0,0,w,h);
-                
-                ctx.strokeStyle = "#00e5ff";
-                ctx.lineWidth = 1.5;
-                ctx.beginPath();
-                
-                const step = w / rawBuffer.length;
-                const mid = h/2;
-                
-                for(let i=0; i<rawBuffer.length; i++) {
-                    const y = mid - (rawBuffer[i] * 0.1);
-                    if(i===0) ctx.moveTo(i*step, y);
-                    else ctx.lineTo(i*step, y);
-                }
-                ctx.stroke();
-                requestAnimationFrame(draw);
-            }
-            draw();
-
-            // Stats
-            setInterval(() => {
-                ui.pps.innerText = ppsCount;
-                ppsCount = 0;
-            }, 1000);
+        window.sendStr = async function(str) {
+            if(!writeChar) { log("NO WRITE CHANNEL!"); return; }
+            try {
+                const enc = new TextEncoder();
+                const data = enc.encode(str);
+                await writeChar.writeValue(data);
+                log(`TX: "${str}"`);
+            } catch(e) { log("TX FAIL: " + e.message); }
         }
     </script>
 </body>
